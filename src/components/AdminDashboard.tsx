@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   FileText, Users, Receipt, LayoutDashboard, Plus, 
   Search, LogOut, CheckCircle2, Clock, Trash2, Calendar,
-  DollarSign, FileDown, CheckCircle, RefreshCw, Send, AlertCircle
+  DollarSign, FileDown, CheckCircle, RefreshCw, Send, AlertCircle, Edit3
 } from "lucide-react";
 import { formatCurrency, formatDate } from "../utils";
 import { RegisteredClient, Contract, BillingItem } from "../types";
+import TermsModal from "./TermsModal";
 
 interface AdminDashboardProps {
   user: any;
@@ -45,6 +46,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const [clientEmail, setClientEmail] = useState("");
   const [clientRepName, setClientRepName] = useState("");
   const [clientPassword, setClientPassword] = useState("123456");
+  const [clientMonthlyFee, setClientMonthlyFee] = useState("179.90");
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   // Form states - Billing
   const [billingClientIndex, setBillingClientIndex] = useState<number>(-1);
@@ -134,7 +138,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     }
   };
 
-  // Create Client
+  // Create or Update Client
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName || !clientEmail) {
@@ -143,35 +147,73 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     }
 
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: clientName,
-          email: clientEmail.toLowerCase().trim(),
-          password: clientPassword || "123456",
-          hasChangedPassword: false, // MANDATORY PASSWORD CHANGE ON FIRST ACCESS
-          representatives: [
-            {
-              name: clientRepName || clientName,
-              email: clientEmail,
-              role: "Cliente"
-            }
-          ]
-        })
-      });
+      if (editingClient) {
+        // Run update PUT
+        const res = await fetch(`/api/clients/${editingClient.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: clientName,
+            email: clientEmail.toLowerCase().trim(),
+            monthlyFee: Number(clientMonthlyFee) || 179.90,
+            representatives: [
+              {
+                name: clientRepName || clientName,
+                email: clientEmail,
+                role: "Cliente"
+              }
+            ]
+          })
+        });
 
-      if (res.ok) {
-        alert(`Cliente cadastrado com sucesso! Uma senha provisória foi configurada.`);
-        setIsClientModalOpen(false);
-        setClientName("");
-        setClientEmail("");
-        setClientRepName("");
-        setClientPassword("123456"); // Reset to standard default placeholder
-        loadData();
+        if (res.ok) {
+          alert(`Cadastro do cliente atualizado com sucesso!`);
+          setIsClientModalOpen(false);
+          setEditingClient(null);
+          setClientName("");
+          setClientEmail("");
+          setClientRepName("");
+          setClientPassword("123456");
+          setClientMonthlyFee("179.90");
+          loadData();
+        } else {
+          const err = await res.json();
+          alert("Erro: " + err.error);
+        }
       } else {
-        const err = await res.json();
-        alert("Erro: " + err.error);
+        // Run standard create
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: clientName,
+            email: clientEmail.toLowerCase().trim(),
+            password: clientPassword || "123456",
+            hasChangedPassword: false, // MANDATORY PASSWORD CHANGE ON FIRST ACCESS
+            monthlyFee: Number(clientMonthlyFee) || 179.90,
+            representatives: [
+              {
+                name: clientRepName || clientName,
+                email: clientEmail,
+                role: "Cliente"
+              }
+            ]
+          })
+        });
+
+        if (res.ok) {
+          alert(`Cliente cadastrado com sucesso! Uma senha provisória foi configurada.`);
+          setIsClientModalOpen(false);
+          setClientName("");
+          setClientEmail("");
+          setClientRepName("");
+          setClientPassword("123456");
+          setClientMonthlyFee("179.90");
+          loadData();
+        } else {
+          const err = await res.json();
+          alert("Erro: " + err.error);
+        }
       }
     } catch (err) {
       alert("Erro de conectividade.");
@@ -622,7 +664,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                     <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400 font-mono font-bold">UID: {c.id}</span>
+                          <span className="bg-blue-50 text-[#0052FF] font-mono text-[9px] font-extrabold px-2 py-0.5 rounded-md border border-blue-100">
+                            {formatCurrency(c.monthlyFee !== undefined ? c.monthlyFee : 179.90)} /mês
+                          </span>
                           <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full ${
                             c.hasChangedPassword ? "bg-green-50 text-green-600 border border-green-150" : "bg-amber-50 text-amber-600 border border-amber-150"
                           }`}>
@@ -640,7 +684,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                           {c.representatives?.map((rep, idx) => (
                             <div key={idx} className="text-xxs text-slate-600 flex justify-between leading-tight mt-1">
                               <strong>{rep.name}</strong>
-                              <span className="text-slate-400 font-medium">{rep.role}</span>
+                              <span className="text-slate-400 font-mono">{c.email}</span>
                             </div>
                           ))}
                         </div>
@@ -651,6 +695,22 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                       </div>
 
                       <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
+                        <button
+                          onClick={() => {
+                            setEditingClient(c);
+                            setClientName(c.name);
+                            setClientEmail(c.email);
+                            setClientRepName(c.representatives?.[0]?.name || c.name);
+                            setClientPassword(""); // Optional during edits
+                            setClientMonthlyFee(c.monthlyFee !== undefined ? String(c.monthlyFee) : "179.90");
+                            setIsClientModalOpen(true);
+                          }}
+                          className="bg-slate-55/5 hover:bg-slate-100 text-slate-700 text-xxs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Editar Cadastro
+                        </button>
+
                         {c.id !== "admin-user" && (
                           <button
                             onClick={() => handleDeleteClient(c.id, c.name)}
@@ -660,7 +720,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                             Excluir Licença
                           </button>
                         )}
-                        <span className="text-xxs text-slate-400 self-center">Senha inicial padrão: 123456</span>
                       </div>
                     </div>
                   ))}
@@ -898,25 +957,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
       </main>
 
-      {/* FOOTER - perfectly literal and humble */}
-      <footer className="bg-white border-t border-slate-200 py-6 mt-12 bg-slate-50/50">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <div>
-            <strong>RJR Sign Portal</strong> • Todos os direitos reservados © 2026.
-          </div>
-          <div>
-            Desenvolvido por{" "}
-            <a 
-              href="https://devrogeriojunior.com.br" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-slate-550 hover:text-slate-900 font-bold hover:underline transition-colors"
-            >
-              Rogério Júnior
-            </a>
-          </div>
-        </div>
-      </footer>
 
       {/* ================= MODAL: CREATE CONTRACT ================= */}
       <AnimatePresence>
@@ -1075,7 +1115,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         )}
       </AnimatePresence>
 
-      {/* ================= MODAL: CREATE CLIENT ================= */}
+               {/* ================= MODAL: CREATE / EDIT CLIENT ================= */}
       <AnimatePresence>
         {isClientModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
@@ -1087,11 +1127,24 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
             >
               <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold">Cadastrar Novo Cliente</h3>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Libere um login operacional corporativo no sistema</span>
+                  <h3 className="text-sm font-bold">
+                    {editingClient ? "Editar Cadastro de Cliente" : "Cadastrar Novo Cliente"}
+                  </h3>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    {editingClient ? "Atualize as informações cadastrais e comerciais da licença" : "Libere um login operacional no sistema"}
+                  </span>
                 </div>
                 <button
-                  onClick={() => setIsClientModalOpen(false)}
+                  type="button"
+                  onClick={() => {
+                    setIsClientModalOpen(false);
+                    setEditingClient(null);
+                    setClientName("");
+                    setClientEmail("");
+                    setClientRepName("");
+                    setClientPassword("123456");
+                    setClientMonthlyFee("179.90");
+                  }}
                   className="p-1 px-3 bg-slate-800 hover:bg-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer"
                 >
                   X
@@ -1125,19 +1178,34 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Senha Provisória do Cliente *</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Valor da Mensalidade Fixa (R$) *</label>
                   <input
-                    type="text"
-                    placeholder="Defina a senha inicial provisória para o cliente"
-                    value={clientPassword}
-                    onChange={(e) => setClientPassword(e.target.value)}
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 179.90"
+                    value={clientMonthlyFee}
+                    onChange={(e) => setClientMonthlyFee(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono font-bold"
                     required
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Defina a senha que você enviará para o cliente acessar pela primeira vez.
-                  </span>
                 </div>
+
+                {!editingClient && (
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Senha Provisória do Cliente *</label>
+                    <input
+                      type="text"
+                      placeholder="Defina a senha inicial provisória para o cliente"
+                      value={clientPassword}
+                      onChange={(e) => setClientPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono font-bold"
+                      required={!editingClient}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Defina a senha que você enviará para o cliente acessar pela primeira vez.
+                    </span>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 my-2 pt-3">
                   <span className="text-[9px] uppercase tracking-wider font-extrabold text-[#0052FF] block mb-2">Dados do Representante Relacionado</span>
@@ -1155,13 +1223,21 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-[10px] text-slate-500 leading-normal">
-                  💡 <strong>Informação de Segurança:</strong> O cliente cadastrado com essa senha provisória será obrigado a redefini-la imediatamente em seu primeiro login no portal.
+                  💡 <strong>Informação de Segurança:</strong> O cliente cadastrado acessará o portal utilizando o e-mail corporativo. Seus dados mostram-se protegidos por hash PBKDF2/SHA512.
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setIsClientModalOpen(false)}
+                    onClick={() => {
+                      setIsClientModalOpen(false);
+                      setEditingClient(null);
+                      setClientName("");
+                      setClientEmail("");
+                      setClientRepName("");
+                      setClientPassword("123456");
+                      setClientMonthlyFee("179.90");
+                    }}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-colors cursor-pointer"
                   >
                     Cancelar
@@ -1170,7 +1246,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                     type="submit"
                     className="px-5 py-2 bg-[#0052FF] hover:bg-[#0040D0] text-white rounded-lg text-xs font-bold shadow-md transition-all cursor-pointer"
                   >
-                    Registrar Conta
+                    {editingClient ? "Atualizar Cadastro" : "Registrar Conta"}
                   </button>
                 </div>
 
@@ -1287,6 +1363,61 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Pure and literal structural footer for Admin */}
+      <footer className="bg-white border-t border-slate-200/80 py-8 mt-12 text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          
+          <div className="flex items-center gap-5">
+            {/* Minimalist Brand Logo in Footer */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-5.5 h-5.5 rounded bg-slate-900 flex items-center justify-center text-white font-mono text-[9px] font-black">
+                R
+              </div>
+              <span className="font-extrabold text-slate-900 text-xs tracking-tight">
+                RJR <span className="text-[#0052FF]">SIGN</span>
+              </span>
+            </div>
+            
+            <span className="text-slate-300 hidden sm:inline">|</span>
+            
+            <p className="text-xxs text-slate-400 font-medium">
+              Todos os direitos reservados © 2026.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => setIsTermsOpen(true)}
+              className="text-slate-500 hover:text-blue-600 hover:underline text-xxs font-bold transition-all cursor-pointer"
+            >
+              Termos de Uso &amp; Privacidade
+            </button>
+            
+            <span className="text-slate-300">|</span>
+
+            <div className="text-xxs">
+              Desenvolvido por{" "}
+              <a 
+                href="https://devrogeriojunior.com.br" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-slate-600 hover:text-slate-950 font-bold hover:underline transition-colors"
+              >
+                Rogério Júnior
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </footer>
+
+      {/* Terms and Privacy Modal Mount */}
+      <AnimatePresence>
+        {isTermsOpen && (
+          <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
         )}
       </AnimatePresence>
 

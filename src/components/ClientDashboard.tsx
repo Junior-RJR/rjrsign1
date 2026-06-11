@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate, generateContractPDF } from "../utils";
 import { Contract, BillingItem } from "../types";
+import TermsModal from "./TermsModal";
 
 interface ClientDashboardProps {
   user: any;
@@ -25,6 +26,8 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [billings, setBillings] = useState<BillingItem[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [clientProfile, setClientProfile] = useState<any>(null);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
   
   // Signature pad states
   const [signingMode, setSigningMode] = useState<"draw" | "type">("draw");
@@ -54,9 +57,10 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
 
   const fetchClientData = async () => {
     try {
-      const [resContracts, resBillings] = await Promise.all([
+      const [resContracts, resBillings, resProfile] = await Promise.all([
         fetch(`/api/contracts?clientEmail=${encodeURIComponent(user.email)}`),
-        fetch(`/api/billing?clientEmail=${encodeURIComponent(user.email)}`)
+        fetch(`/api/billing?clientEmail=${encodeURIComponent(user.email)}`),
+        fetch(`/api/clients?email=${encodeURIComponent(user.email)}`)
       ]);
 
       if (resContracts.ok) {
@@ -68,6 +72,14 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
       }
       if (resBillings.ok) {
         setBillings(await resBillings.json());
+      }
+      if (resProfile.ok) {
+        const pData = await resProfile.json();
+        if (Array.isArray(pData) && pData.length > 0) {
+          setClientProfile(pData[0]);
+        } else if (pData && !pData.error) {
+          setClientProfile(pData);
+        }
       }
     } catch (err) {
       console.error("Erro ao coletar dados do cliente", err);
@@ -334,34 +346,36 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
       
-      {/* HEADER structure exactly matched */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+      {/* HEADER structure redesigned for professional minimalist look */}
+      <header className="bg-white border-b border-slate-200/85 sticky top-0 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between py-3.5">
           
           <div className="flex items-center gap-3">
-            <img src="/logo.svg" alt="RJR Sign Logo" className="w-10 h-10 object-contain animate-fade-in" referrerPolicy="no-referrer" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-slate-950 to-slate-800 flex items-center justify-center text-white shadow-md">
+              <span className="font-mono text-base font-black tracking-tighter">R</span>
+            </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-sans font-extrabold text-lg text-slate-900 leading-none">RJR SIGN</span>
-                <span className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-100">
-                  PORTAL DO ASSINANTE
+                <span className="font-extrabold text-slate-900 text-base leading-none tracking-tight">RJR <span className="text-[#0052FF]">SIGN</span></span>
+                <span className="bg-slate-100 text-slate-600 text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider font-mono">
+                  Portal do Assinante
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 block leading-none mt-1">Gestão de Documentos Digitais</span>
+              <span className="text-[10px] text-slate-400 block leading-none mt-1">Conformidade e Assinatura Eletrônica</span>
             </div>
           </div>
 
           {/* Right Area */}
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden md:block">
-              <strong className="text-xs text-slate-900 block truncate max-w-[150px]">{user.name}</strong>
-              <span className="text-[10px] text-slate-400 font-mono italic block">{user.email}</span>
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <strong className="text-xs text-slate-900 block truncate max-w-[180px] font-semibold">{user.name}</strong>
+              <span className="text-[9px] text-slate-400 font-mono block leading-none mt-0.5">{user.email}</span>
             </div>
             <button
               onClick={onLogout}
-              className="p-1 px-3 bg-slate-100 hover:bg-slate-200 hover:text-red-650 text-slate-600 font-bold transition-all rounded-lg text-xs flex items-center gap-1.5 cursor-pointer border border-slate-200"
+              className="p-1.5 px-3 hover:bg-slate-50 text-slate-650 hover:text-slate-900 font-bold transition-all rounded-xl text-xs flex items-center gap-1.5 cursor-pointer border border-slate-200"
             >
-              <LogOut className="w-3.5 h-3.5 hover:text-red-650" />
+              <LogOut className="w-3.5 h-3.5" />
               Sair
             </button>
           </div>
@@ -390,12 +404,25 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
               <div>
                 <span className="text-slate-400 block mb-0.5">Assinante Representado:</span>
                 <strong className="text-slate-800 font-bold block">
-                  {user.representatives?.[0]?.name || user.name}
+                  {clientProfile?.representatives?.[0]?.name || user.representatives?.[0]?.name || user.name}
                 </strong>
               </div>
+              
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-400 block mb-0.5 text-[8px] uppercase tracking-wider font-bold">Mensalidade Registrada:</span>
+                  <strong className="text-slate-950 font-mono text-sm block font-black leading-tight">
+                    {formatCurrency(clientProfile?.monthlyFee !== undefined ? clientProfile.monthlyFee : (user.monthlyFee || 179.90))}
+                  </strong>
+                </div>
+                <span className="bg-blue-55/10 text-[#0052FF] border border-blue-100 font-mono text-[9px] font-extrabold px-2 py-0.5 rounded">
+                  Mensal
+                </span>
+              </div>
+
               <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-2 rounded-xl border border-green-150">
                 <ShieldCheck className="w-4.5 h-4.5 text-green-600" />
-                <span className="font-bold">Licença Habilitada & Ativa</span>
+                <span className="font-bold">Licença Ativa</span>
               </div>
             </div>
           </div>
@@ -745,24 +772,59 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
       </main>
 
       {/* Pure and literal structural footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 mt-12 text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <strong>RJR Sign Portal</strong> • Todos os direitos reservados © 2026.
+      <footer className="bg-white border-t border-slate-200/80 py-8 mt-12 text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          
+          <div className="flex items-center gap-5">
+            {/* Minimalist Brand Logo in Footer */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-5.5 h-5.5 rounded bg-slate-900 flex items-center justify-center text-white font-mono text-[9px] font-black">
+                R
+              </div>
+              <span className="font-extrabold text-slate-900 text-xs tracking-tight">
+                RJR <span className="text-[#0052FF]">SIGN</span>
+              </span>
+            </div>
+            
+            <span className="text-slate-300 hidden sm:inline">|</span>
+            
+            <p className="text-xxs text-slate-400 font-medium">
+              Todos os direitos reservados © 2026.
+            </p>
           </div>
-          <div>
-            Desenvolvido por{" "}
-            <a 
-              href="https://devrogeriojunior.com.br" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-slate-500 hover:text-slate-900 font-bold hover:underline transition-colors"
+
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => setIsTermsOpen(true)}
+              className="text-slate-500 hover:text-blue-600 hover:underline text-xxs font-bold transition-all cursor-pointer"
             >
-              Rogério Júnior
-            </a>
+              Termos de Uso &amp; Privacidade
+            </button>
+            
+            <span className="text-slate-300">|</span>
+
+            <div className="text-xxs">
+              Desenvolvido por{" "}
+              <a 
+                href="https://devrogeriojunior.com.br" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-slate-600 hover:text-slate-950 font-bold hover:underline transition-colors"
+              >
+                Rogério Júnior
+              </a>
+            </div>
           </div>
+
         </div>
       </footer>
+
+      {/* Terms and Privacy Modal Mount */}
+      <AnimatePresence>
+        {isTermsOpen && (
+          <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+        )}
+      </AnimatePresence>
 
     </div>
   );

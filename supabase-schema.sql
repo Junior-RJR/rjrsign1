@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS public.registered_clients (
     representatives JSONB NOT NULL DEFAULT '[]'::jsonb, -- Array of representatives {name, email, role}
     current_password VARCHAR(512) NOT NULL DEFAULT '123456', -- This will store SHA512 PBKDF2 hash of standard initial pass
     has_changed_password BOOLEAN NOT NULL DEFAULT FALSE,
+    monthly_fee DECIMAL(12, 2) NOT NULL DEFAULT 179.90, -- Plan price
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
@@ -112,12 +113,22 @@ ON CONFLICT (name) DO NOTHING;
 
 -- Insert default admin user: devrogeriojunior@gmail.com (Password: Manu2612)
 -- Current password value stored is the PBKDF2 SHA512 hex representation of "Manu2612" (using salt 'rjr_sync_bellacor_secure_salt_987')
-INSERT INTO public.registered_clients (id, name, email, representatives, current_password, has_changed_password, created_at) VALUES
-('admin-user', 'Rogério Júnior (Admin)', 'devrogeriojunior@gmail.com', '[{"name": "Rogerio Junior", "email": "devrogeriojunior@gmail.com", "role": "Administrador"}]'::jsonb, 'e85cae10b106a77d85c85671ef3b6ea26fe5750d4ad6be0eac6bc4dbd0b985f0ef3524b07173b06de767dc40fe7e8bf69e6b5da418beccd29ec978eb3cc7b43f', TRUE, NOW())
+INSERT INTO public.registered_clients (id, name, email, representatives, current_password, has_changed_password, monthly_fee, created_at) VALUES
+('admin-user', 'Rogério Júnior (Admin)', 'devrogeriojunior@gmail.com', '[{"name": "Rogerio Junior", "email": "devrogeriojunior@gmail.com", "role": "Administrador"}]'::jsonb, 'e85cae10b106a77d85c85671ef3b6ea26fe5750d4ad6be0eac6bc4dbd0b985f0ef3524b07173b06de767dc40fe7e8bf69e6b5da418beccd29ec978eb3cc7b43f', TRUE, 0.00, NOW())
 ON CONFLICT (email) DO NOTHING;
 
 -- Insert default client user: consultor@bellacortintas.com.br (Password: 123456)
 -- Current password value stored is the PBKDF2 SHA512 hex representation of "123456"
-INSERT INTO public.registered_clients (id, name, email, representatives, current_password, has_changed_password, created_at) VALUES
-('bellacor-client', 'Bellacor Tintas', 'consultor@bellacortintas.com.br', '[{"name": "Bruno Carvalho", "email": "consultor@bellacortintas.com.br", "role": "Diretor Comercial"}]'::jsonb, '12c1d9bfe66cbce4857ed8ac31fa9fc7a72dccd31d044fa66c3038ce02fbf246ca8a892789211c4c920f5c1d3bf52eafdfa610fdf441c08d13af23b53f622be3', FALSE, NOW())
+INSERT INTO public.registered_clients (id, name, email, representatives, current_password, has_changed_password, monthly_fee, created_at) VALUES
+('bellacor-client', 'Bellacor Tintas', 'consultor@bellacortintas.com.br', '[{"name": "Bruno Carvalho", "email": "consultor@bellacortintas.com.br"}]'::jsonb, '12c1d9bfe66cbce4857ed8ac31fa9fc7a72dccd31d044fa66c3038ce02fbf246ca8a892789211c4c920f5c1d3bf52eafdfa610fdf441c08d13af23b53f622be3', FALSE, 179.90, NOW())
 ON CONFLICT (email) DO NOTHING;
+
+
+-- ===========================================================================
+-- DATABASE MIGRATION SCRIPT (ALTER STATEMENTS FOR EXISTING LIVE INSTANCES)
+-- ===========================================================================
+-- Run this block in your Supabase SQL Editor if your tables are already created:
+-- 
+-- ALTER TABLE public.registered_clients 
+-- ADD COLUMN IF NOT EXISTS monthly_fee DECIMAL(12, 2) NOT NULL DEFAULT 179.90;
+-- ===========================================================================

@@ -239,13 +239,12 @@ export function generateContractPDF(contract: any) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(15, 23, 42); // slate 900
-    doc.text(signer.name || "Signatário representado", 20, currentY + 8);
+    doc.text(signer.name || "Signatário representado", 20, currentY + 10);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(textGray[0], textGray[1], textGray[2]);
-    doc.text(`E-mail: ${signer.email}`, 20, currentY + 13);
-    doc.text(`Cargo / Perfil: ${signer.role || "Signatário"}`, 20, currentY + 18);
+    doc.text(`E-mail: ${signer.email}`, 20, currentY + 16);
 
     if (signer.status === "signed") {
       // Signature meta

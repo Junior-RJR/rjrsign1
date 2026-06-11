@@ -1021,6 +1021,7 @@ app.post("/api/auth/login", async (req, res) => {
           email: data.email,
           representatives: data.representatives,
           hasChangedPassword: data.has_changed_password,
+          monthlyFee: data.monthly_fee !== undefined ? Number(data.monthly_fee) : 179.90,
           isAdmin: (data.email || "").toLowerCase().trim() === "devrogeriojunior@gmail.com"
         };
         storedHash = data.current_password;
@@ -1034,6 +1035,7 @@ app.post("/api/auth/login", async (req, res) => {
           email: fallbackClient.email,
           representatives: fallbackClient.representatives,
           hasChangedPassword: fallbackClient.hasChangedPassword,
+          monthlyFee: fallbackClient.monthlyFee !== undefined ? Number(fallbackClient.monthlyFee) : 179.90,
           isAdmin: fallbackClient.email.toLowerCase().trim() === "devrogeriojunior@gmail.com"
         };
         storedHash = db.passMap[client.id];
@@ -1133,7 +1135,8 @@ app.post("/api/auth/register", async (req, res) => {
           email: cleanEmail,
           representatives: formattedReps,
           current_password: hashedPassword,
-          has_changed_password: hasChangedPasswordValue
+          has_changed_password: hasChangedPasswordValue,
+          monthly_fee: req.body.monthlyFee !== undefined ? Number(req.body.monthlyFee) : 179.90
         });
 
       if (insertError) {
@@ -1150,12 +1153,13 @@ app.post("/api/auth/register", async (req, res) => {
         ? req.body.hasChangedPassword 
         : (isAdmin || cleanEmail === "devrogeriojunior@gmail.com" ? true : false);
 
-      const newClient: RegisteredClient = {
+      const newClient: any = {
         id: newId,
         name,
         email: cleanEmail,
         representatives: formattedReps,
         hasChangedPassword: hasChangedPasswordValue,
+        monthlyFee: req.body.monthlyFee !== undefined ? Number(req.body.monthlyFee) : 179.90,
         createdAt: new Date().toISOString()
       };
 
@@ -1173,6 +1177,7 @@ app.post("/api/auth/register", async (req, res) => {
         hasChangedPassword: req.body.hasChangedPassword !== undefined 
           ? req.body.hasChangedPassword 
           : (isAdmin || cleanEmail === "devrogeriojunior@gmail.com" ? true : false),
+        monthlyFee: req.body.monthlyFee !== undefined ? Number(req.body.monthlyFee) : 179.90,
         isAdmin: cleanEmail === "devrogeriojunior@gmail.com"
       }
     });
@@ -1232,12 +1237,19 @@ app.post("/api/auth/change-password", async (req, res) => {
 
 // Clients management APIs
 app.get("/api/clients", async (req, res) => {
+  const { email } = req.query;
   try {
     if (supabase) {
-      const { data, error } = await supabase
+      let query = supabase
         .from("registered_clients")
-        .select("id, name, email, representatives, has_changed_password, created_at")
+        .select("id, name, email, representatives, has_changed_password, created_at, monthly_fee")
         .order("name", { ascending: true });
+
+      if (email) {
+        query = query.eq("email", String(email).toLowerCase().trim());
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Erro ao listar clientes no Supabase:", error);
@@ -1250,14 +1262,33 @@ app.get("/api/clients", async (req, res) => {
         email: row.email,
         representatives: row.representatives,
         hasChangedPassword: row.has_changed_password,
+        monthlyFee: row.monthly_fee !== undefined ? Number(row.monthly_fee) : 179.90,
         createdAt: row.created_at
       }));
 
+      if (email && mapped.length > 0) {
+        return res.json(mapped[0]);
+      }
+
       return res.json(mapped);
     } else {
-      res.json(db.clients.map(({ id, name, email, representatives, hasChangedPassword, createdAt }: any) => ({
-        id, name, email, representatives, hasChangedPassword, createdAt
-      })));
+      const listMapped = db.clients.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        representatives: c.representatives,
+        hasChangedPassword: c.hasChangedPassword,
+        monthlyFee: c.monthlyFee !== undefined ? Number(c.monthlyFee) : 179.90,
+        createdAt: c.createdAt
+      }));
+
+      if (email) {
+        const found = listMapped.find((c: any) => c.email.toLowerCase().trim() === String(email).toLowerCase().trim());
+        if (found) return res.json(found);
+        return res.status(404).json({ error: "Cliente não localizado por email." });
+      }
+
+      res.json(listMapped);
     }
   } catch (err) {
     res.status(500).json({ error: "Erro interno ao listar clientes." });
@@ -1295,6 +1326,75 @@ app.delete("/api/clients/:id", async (req, res) => {
     res.json({ success: true, message: "Cliente excluído com sucesso." });
   } catch (err) {
     res.status(500).json({ error: "Erro de exclusão e integridade referencial." });
+  }
+});
+
+app.put("/api/clients/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, email, representatives, monthlyFee } = req.body;
+
+  try {
+    const formattedEmail = email ? email.toLowerCase().trim() : undefined;
+    const mappedFee = monthlyFee !== undefined ? Number(monthlyFee) : 179.90;
+
+    if (supabase) {
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (formattedEmail !== undefined) updates.email = formattedEmail;
+      if (representatives !== undefined) updates.representatives = representatives;
+      if (monthlyFee !== undefined) updates.monthly_fee = mappedFee;
+
+      const { error } = await supabase
+        .from("registered_clients")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) {
+        console.error("Erro ao atualizar cliente no Supabase:", error);
+        return res.status(500).json({ error: "Erro de banco de dados ao atualizar cadastro." });
+      }
+
+      const { data: updated, error: fetchErr } = await supabase
+        .from("registered_clients")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (fetchErr || !updated) {
+        return res.status(404).json({ error: "Cliente não localizado." });
+      }
+
+      return res.json({
+        id: updated.id,
+        name: updated.name,
+        email: updated.email,
+        representatives: updated.representatives,
+        hasChangedPassword: updated.has_changed_password,
+        monthlyFee: updated.monthly_fee !== undefined ? Number(updated.monthly_fee) : 179.90,
+        createdAt: updated.created_at
+      });
+    } else {
+      const client = db.clients.find((c: any) => c.id === id);
+      if (!client) return res.status(404).json({ error: "Cliente não localizado." });
+
+      if (name !== undefined) client.name = name;
+      if (formattedEmail !== undefined) client.email = formattedEmail;
+      if (representatives !== undefined) client.representatives = representatives;
+      if (monthlyFee !== undefined) client.monthlyFee = mappedFee;
+
+      saveDatabase();
+      res.json({
+        id: client.id,
+        name: client.name,
+        email: client.email,
+        representatives: client.representatives,
+        hasChangedPassword: client.hasChangedPassword,
+        monthlyFee: client.monthlyFee !== undefined ? Number(client.monthlyFee) : 179.90,
+        createdAt: client.createdAt
+      });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Erro interno ao atualizar cliente." });
   }
 });
 
