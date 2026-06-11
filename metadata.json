@@ -1,0 +1,6 @@
+{
+  "name": "RJR Sign",
+  "description": "Plataforma de Gestão de Contratos e Cobranças - Cadastro de contratos e assinatura digital de clientes",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
