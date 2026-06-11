@@ -533,6 +533,281 @@ console.log("[RJR SERVER] 15. Chamando função loadDatabase() at module scope..
 loadDatabase();
 console.log("[RJR SERVER] 16. loadDatabase() concluída.");
 
+// Auto-seed Supabase database if connected and empty
+async function ensureDefaultUsersInSupabase() {
+  if (!supabase) return;
+  try {
+    console.log("[RJR SERVER BOOT] Verificando se o Supabase está com as tabelas criadas e povoadas...");
+
+    // 1. Seed registered_clients
+    const { data: clients, error: clientErr } = await supabase
+      .from("registered_clients")
+      .select("id")
+      .limit(1);
+
+    if (clientErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar usuários no Supabase (registered_clients):", clientErr.message);
+    } else if (!clients || clients.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'registered_clients' vazia. Inserindo credenciais padrão...");
+      const adminHashed = hashPassword("Manu2612");
+      const clientHashed = hashPassword("123456");
+
+      const defaultClients = [
+        {
+          id: "admin-user",
+          name: "Rogério Júnior (Admin)",
+          email: "devrogeriojunior@gmail.com",
+          representatives: [
+            { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Administrador Técnico" }
+          ],
+          current_password: adminHashed,
+          has_changed_password: true
+        },
+        {
+          id: "bellacor-client",
+          name: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
+          email: "consultor@bellacortintas.com.br",
+          representatives: [
+            { name: "Bruno Carvalho", email: "consultor@bellacortintas.com.br", role: "Diretor Comercial" },
+            { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Suporte TI" }
+          ],
+          current_password: clientHashed,
+          has_changed_password: false
+        }
+      ];
+
+      for (const client of defaultClients) {
+        const { error: insErr } = await supabase
+          .from("registered_clients")
+          .insert(client);
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir usuário de fallback ${client.email}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Usuário de fallback ${client.email} inserido com sucesso.`);
+        }
+      }
+    } else {
+      console.log("[RJR SERVER BOOT] Tabela 'registered_clients' já possui registros.");
+    }
+
+    // 2. Seed categories
+    const { data: cats, error: catErr } = await supabase
+      .from("categories")
+      .select("id")
+      .limit(1);
+
+    if (catErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar categorias no Supabase (categories):", catErr.message);
+    } else if (!cats || cats.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'categories' vazia. Inserindo categorias oficiais de fallback...");
+      const defaultCategories = [
+        { id: "cat-1", name: "Acrílicos Cobertura" },
+        { id: "cat-2", name: "Esmaltes Metais/Madeiras" },
+        { id: "cat-3", name: "Seladores e Primers" },
+        { id: "cat-4", name: "Tintas Premium Impermeabilizantes" }
+      ];
+      for (const cat of defaultCategories) {
+        const { error: insErr } = await supabase
+          .from("categories")
+          .insert(cat);
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir categoria de fallback ${cat.name}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Categoria de fallback ${cat.name} inserida.`);
+        }
+      }
+    }
+
+    // 3. Seed default products if empty
+    const { data: prods, error: prodErr } = await supabase
+      .from("products")
+      .select("id")
+      .limit(1);
+    
+    if (prodErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar produtos no Supabase (products):", prodErr.message);
+    } else if (!prods || prods.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'products' vazia. Copiando catálogo padrão do db.json...");
+      const initialDb = getInitialDatabaseState();
+      for (const prod of initialDb.products) {
+        const { error: insErr } = await supabase
+          .from("products")
+          .insert({
+            id: prod.id,
+            name: prod.name,
+            category: prod.category,
+            image: prod.image,
+            description: prod.description,
+            is_essential: prod.isEssential,
+            dilution: prod.dilution,
+            diluent: prod.diluent,
+            finish: prod.finish,
+            yield_per_m2: prod.yieldPerM2,
+            drying_time: prod.dryingTime,
+            yield_total: prod.yieldTotal,
+            recommended_coats: prod.recommendedCoats,
+            area_of_use: prod.areaOfUse,
+            odor: prod.odor,
+            antimold: prod.antimold,
+            colors: prod.colors,
+            variants: prod.variants
+          });
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir produto de fallback ${prod.name}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Produto de fallback ${prod.name} inserido.`);
+        }
+      }
+    }
+
+    // 4. Seed contracts
+    const { data: contracts, error: contractErr } = await supabase
+      .from("contracts")
+      .select("id")
+      .limit(1);
+
+    if (contractErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar contratos no Supabase (contracts):", contractErr.message);
+    } else if (!contracts || contracts.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'contracts' vazia. Inserindo contrato modelo de fallback...");
+      const initialDb = getInitialDatabaseState();
+      for (const contract of initialDb.contracts) {
+        const { error: insErr } = await supabase
+          .from("contracts")
+          .insert({
+            id: contract.id,
+            title: contract.title,
+            client_name: contract.clientName,
+            client_email: contract.clientEmail,
+            content: contract.content,
+            status: contract.status,
+            created_at: contract.createdAt,
+            sent_email_count: contract.sentEmailCount,
+            download_count: contract.downloadCount,
+            category: contract.category,
+            value: contract.value,
+            signers: contract.signers
+          });
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir contrato de fallback ${contract.title}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Contrato de fallback ${contract.title} inserido.`);
+        }
+      }
+    }
+
+    // 5. Seed billing_items
+    const { data: bills, error: billErr } = await supabase
+      .from("billing_items")
+      .select("id")
+      .limit(1);
+
+    if (billErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar cobranças no Supabase (billing_items):", billErr.message);
+    } else if (!bills || bills.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'billing_items' vazia. Inserindo faturamento modelo de fallback...");
+      const initialDb = getInitialDatabaseState();
+      for (const bill of initialDb.billingItems) {
+        const { error: insErr } = await supabase
+          .from("billing_items")
+          .insert({
+            id: bill.id,
+            client_name: bill.clientName,
+            client_email: bill.clientEmail,
+            type: bill.type,
+            amount: bill.amount,
+            due_date: bill.dueDate,
+            payment_date: bill.paymentDate || null,
+            status: bill.status,
+            description: bill.description,
+            created_at: bill.createdAt
+          });
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir cobrança de fallback ${bill.id}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Cobrança de fallback ${bill.id} inserida.`);
+        }
+      }
+    }
+
+    // 6. Seed leads
+    const { data: leads, error: leadErr } = await supabase
+      .from("leads")
+      .select("id")
+      .limit(1);
+
+    if (leadErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar leads no Supabase (leads):", leadErr.message);
+    } else if (!leads || leads.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'leads' vazia. Inserindo leads de teste de fallback...");
+      const initialDb = getInitialDatabaseState();
+      for (const lead of initialDb.leads) {
+        const { error: insErr } = await supabase
+          .from("leads")
+          .insert({
+            id: lead.id,
+            cnpj: lead.cnpj,
+            company_name: lead.companyName,
+            phone: lead.phone,
+            address: lead.address,
+            city: lead.city,
+            state: lead.state,
+            business_type: lead.businessType,
+            target_product: lead.targetProduct,
+            message: lead.message,
+            is_contacted: lead.isContacted,
+            utm_source: lead.utmSource || null,
+            utm_medium: lead.utmMedium || null,
+            utm_campaign: lead.utmCampaign || null,
+            utm_content: lead.utmContent || null,
+            created_at: lead.createdAt
+          });
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir lead de fallback ${lead.id}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] Lead de fallback ${lead.id} inserido.`);
+        }
+      }
+    }
+
+    // 7. Seed newsletter
+    const { data: news, error: newsErr } = await supabase
+      .from("newsletter")
+      .select("id")
+      .limit(1);
+
+    if (newsErr) {
+      console.error("[RJR SERVER BOOT] Erro ao verificar newsletter no Supabase (newsletter):", newsErr.message);
+    } else if (!news || news.length === 0) {
+      console.log("[RJR SERVER BOOT] Tabela 'newsletter' vazia. Inserindo contatos de teste de fallback...");
+      const initialDb = getInitialDatabaseState();
+      for (const sub of initialDb.newsletter) {
+        const { error: insErr } = await supabase
+          .from("newsletter")
+          .insert({
+            id: sub.id,
+            email: sub.email,
+            created_at: sub.createdAt
+          });
+        if (insErr) {
+          console.error(`[RJR SERVER BOOT] Erro ao inserir e-mail de newsletter de fallback ${sub.email}:`, insErr.message);
+        } else {
+          console.log(`[RJR SERVER BOOT] E-mail de newsletter de fallback ${sub.email} inserido.`);
+        }
+      }
+    }
+
+    console.log("[RJR SERVER BOOT] ✔ AUTO-SEEP COMPACTADO DO SUPABASE FINALIZADO COM SUCESSO!");
+  } catch (err: any) {
+    console.error("[RJR SERVER BOOT] Exceção crítica ao executar o auto-seed do Supabase:", err.message);
+  }
+}
+
+// Spark background seed processing
+if (supabase) {
+  ensureDefaultUsersInSupabase();
+}
+
 // --- DIAGNOSTICS ENDPOINT ---
 app.get("/api/diagnose", async (req, res) => {
   const mask = (str: string) => {
