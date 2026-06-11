@@ -1007,14 +1007,28 @@ app.post("/api/auth/login", async (req, res) => {
       }
     }
 
+    console.log(`[RJR LOGIN DEBUG] Tentativa de login para: ${email}`);
     if (!client) {
+      console.log(`[RJR LOGIN DEBUG] Usuário não encontrado no banco de dados para email de busca: ${email.toLowerCase().trim()}`);
       return res.status(401).json({ error: "E-mail ou senha incorretos" });
     }
 
     const inputHash = hashPassword(password);
-    if (inputHash === storedHash || password === storedHash) {
+    const matchesHash = inputHash === storedHash;
+    const matchesPlain = password === storedHash;
+
+    console.log(`[RJR LOGIN DEBUG] Usuário localizado: ${client.name} (${client.email})`);
+    console.log(`[RJR LOGIN DEBUG] Senha digitada: ${password}`);
+    console.log(`[RJR LOGIN DEBUG] Hash gerado da senha digitada: ${inputHash}`);
+    console.log(`[RJR LOGIN DEBUG] Senha salva no Banco (storedHash): ${storedHash}`);
+    console.log(`[RJR LOGIN DEBUG] Comparação Hash bate?: ${matchesHash}`);
+    console.log(`[RJR LOGIN DEBUG] Comparação Texto puro bate?: ${matchesPlain}`);
+
+    if (matchesHash || matchesPlain) {
+      console.log(`[RJR LOGIN DEBUG] Login AUTORIZADO com sucesso para ${client.email}`);
       return res.json({ user: client });
     } else {
+      console.log(`[RJR LOGIN DEBUG] Login RECUSADO: senha incorreta.`);
       return res.status(401).json({ error: "E-mail ou senha incorretos" });
     }
   } catch (err: any) {
