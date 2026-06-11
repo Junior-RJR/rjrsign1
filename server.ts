@@ -7,12 +7,15 @@ import { createClient } from "@supabase/supabase-js";
 import { RegisteredClient, Contract, BillingItem, Lead, NewsletterEmail, Product, Category, Representative, SignerStatus } from "./src/types";
 
 // Load environment variables from .env if present
+console.log("[RJR SERVER] 10. Carregando variáveis de ambiente...");
 dotenv.config();
 
+console.log("[RJR SERVER] 11. Instanciando aplicativo Express...");
 const app = express();
 const PORT = 3000;
 
 // Supabase Connection Configuration
+console.log("[RJR SERVER] 12. Configurando cliente Supabase...");
 const rawSupabaseUrl = (process.env.SUPABASE_URL || "").trim();
 const SUPABASE_URL = rawSupabaseUrl.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || "";
@@ -22,9 +25,18 @@ const isSupabaseConfigured = SUPABASE_URL.trim() !== "" &&
                              SUPABASE_ANON_KEY.trim() !== "" && 
                              !SUPABASE_ANON_KEY.includes("your-supabase-anon-key");
 
-const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+console.log(`[RJR SERVER] 13. Supabase configurado? ${isSupabaseConfigured} (URL: ${SUPABASE_URL ? "DETECTADA" : "NÃO_DETECTADA"})`);
+let supabase = null;
+try {
+  if (isSupabaseConfigured) {
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log("[RJR SERVER] 14. Cliente Supabase instanciado com sucesso.");
+  }
+} catch (supaErr: any) {
+  console.error("[RJR SERVER] ERRO durante instanciação do Supabase:", supaErr);
+}
 
-if (isSupabaseConfigured) {
+if (isSupabaseConfigured && supabase) {
   console.log("\x1b[32m✔ RJR SIGN: CONEXÃO COM O SUPABASE ATIVADA COM SUCESSO!\x1b[0m");
 } else {
   console.log("\x1b[33m⚠ RJR SIGN: SUPABASE NÃO CONFIGURADO. USANDO FALLBACK DE ARQUIVO JSON.\x1b[0m");
@@ -484,31 +496,42 @@ Local de Pacto de Serviços: Boituva - SP, 01 de Junho de 2026.
 let db: any = null;
 
 function loadDatabase() {
+  console.log("[RJR SERVER] 100. Iniciando função loadDatabase()...");
   try {
+    console.log(`[RJR SERVER] 101. Verificando se existe o arquivo de banco local: ${DB_FILE}`);
     if (fs.existsSync(DB_FILE)) {
+      console.log("[RJR SERVER] 102. Arquivo existente encontrado! Lendo arquivo...");
       const dataString = fs.readFileSync(DB_FILE, "utf-8");
+      console.log("[RJR SERVER] 103. Fazendo parsing do conteúdo JSON...");
       db = JSON.parse(dataString);
+      console.log("[RJR SERVER] 104. Parsing concluído com sucesso.");
     } else {
+      console.log("[RJR SERVER] 105. Arquivo local não encontrado. Carregando estado inicial limpo...");
       db = getInitialDatabaseState();
+      console.log("[RJR SERVER] 106. Gravando banco de fallback no disco local...");
       saveDatabase();
     }
-  } catch (err) {
-    console.error("Erro ao carregar banco local JSON, restaurando fallback default...", err);
+  } catch (err: any) {
+    console.error("[RJR SERVER] ERRO ao carregar banco local JSON, restaurando fallback default...", err);
     db = getInitialDatabaseState();
     saveDatabase();
   }
 }
 
 function saveDatabase() {
+  console.log("[RJR SERVER] 200. Gravando banco de dados JSON em disco...");
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Erro ao escrever alterações no banco de dados JSON", err);
+    console.log("[RJR SERVER] 201. Banco JSON escrito com sucesso.");
+  } catch (err: any) {
+    console.error("[RJR SERVER] ERRO capturado (ignorável) ao escrever alterações no banco JSON:", err.message);
   }
 }
 
 // Load DB immediately
+console.log("[RJR SERVER] 15. Chamando função loadDatabase() at module scope...");
 loadDatabase();
+console.log("[RJR SERVER] 16. loadDatabase() concluída.");
 
 // --- DIAGNOSTICS ENDPOINT ---
 app.get("/api/diagnose", async (req, res) => {

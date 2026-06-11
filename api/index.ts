@@ -1,10 +1,12 @@
 export default async function (req: any, res: any) {
+  console.log(`[RJR VERCEL] 1. Recebendo requisição para: ${req.method} ${req.url}`);
   try {
-    // Dynamic import to catch module loading/initialization errors
+    console.log("[RJR VERCEL] 2. Iniciando importação dinâmica do server.ts...");
     const { default: app } = await import("../server");
+    console.log("[RJR VERCEL] 3. Importação do server.ts concluída com sucesso! Chamando handler da requisição...");
     return app(req, res);
   } catch (err: any) {
-    console.error("Vercel Init Error occurred:", err);
+    console.error("[RJR VERCEL] CRÍTICO: Erro capturado na inicialização:", err);
     res.status(500).json({
       error: "Instabilidade na inicialização do servidor RJR Sign (Vercel Boot Error)",
       message: err.message,
