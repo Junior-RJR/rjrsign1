@@ -14,7 +14,8 @@ const app = express();
 const PORT = 3000;
 
 // Supabase Connection Configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const rawSupabaseUrl = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_URL = rawSupabaseUrl.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || "";
 
 const isSupabaseConfigured = SUPABASE_URL.trim() !== "" && 
