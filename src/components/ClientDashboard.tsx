@@ -5,7 +5,7 @@ import {
   Check, Lock, Edit3, Trash2, PenTool,
   Clock, LogOut, CheckCircle2, Eye, Download, Info
 } from "lucide-react";
-import { formatCurrency, formatDate } from "../utils";
+import { formatCurrency, formatDate, generateContractPDF } from "../utils";
 import { Contract, BillingItem } from "../types";
 
 interface ClientDashboardProps {
@@ -353,10 +353,6 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
 
           {/* Right Area */}
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-500/10 uppercase font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Conexão Ativa
-            </span>
             <div className="text-right hidden md:block">
               <strong className="text-xs text-slate-900 block truncate max-w-[150px]">{user.name}</strong>
               <span className="text-[10px] text-slate-400 font-mono italic block">{user.email}</span>
@@ -396,7 +392,6 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
                 <strong className="text-slate-800 font-bold block">
                   {user.representatives?.[0]?.name || user.name}
                 </strong>
-                <span className="text-slate-400 mt-0.5 block">{user.representatives?.[0]?.role || "Representante Autoutorgado"}</span>
               </div>
               <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-2 rounded-xl border border-green-150">
                 <ShieldCheck className="w-4.5 h-4.5 text-green-600" />
@@ -619,8 +614,10 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
                         onClick={async () => {
                           try {
                             await fetch(`/api/contracts/${selectedContract.id}/download`, { method: "POST" });
-                            alert("Documento assinado gerado em Sandbox de impressão física!");
-                          } catch (e) {}
+                            generateContractPDF(selectedContract);
+                          } catch (e) {
+                            generateContractPDF(selectedContract);
+                          }
                         }}
                         className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xxs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow"
                       >

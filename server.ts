@@ -1402,27 +1402,36 @@ app.post("/api/admin/purge-and-protect", async (req, res) => {
   }
 });
 
-// Contracts management APIs
 app.get("/api/contracts", async (req, res) => {
   const { clientEmail } = req.query;
   try {
     if (supabase) {
-      let query = supabase.from("contracts").select("*");
-      if (clientEmail) {
-        query = query.eq("client_email", (clientEmail as string).toLowerCase().trim());
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabase.from("contracts").select("*");
       if (error) {
         console.error("Erro ao buscar contratos no Supabase:", error);
         return res.status(500).json({ error: "Erro ao consultar contratos." });
       }
-      return res.json((data || []).map(mapContractFromDb));
-    } else {
+      let list = (data || []).map(mapContractFromDb);
       if (clientEmail) {
-        const list = db.contracts.filter((c: any) => c.clientEmail.toLowerCase() === (clientEmail as string).toLowerCase());
-        return res.json(list);
+        const searchEmail = (clientEmail as string).toLowerCase().trim();
+        list = list.filter(c => {
+          const matchesClientEmail = (c.clientEmail || "").toLowerCase().trim() === searchEmail;
+          const matchesSigners = (c.signers || []).some((s: any) => (s.email || "").toLowerCase().trim() === searchEmail);
+          return matchesClientEmail || matchesSigners;
+        });
       }
-      res.json(db.contracts);
+      return res.json(list);
+    } else {
+      let list = db.contracts;
+      if (clientEmail) {
+        const searchEmail = (clientEmail as string).toLowerCase().trim();
+        list = list.filter((c: any) => {
+          const matchesClientEmail = (c.clientEmail || "").toLowerCase().trim() === searchEmail;
+          const matchesSigners = (c.signers || []).some((s: any) => (s.email || "").toLowerCase().trim() === searchEmail);
+          return matchesClientEmail || matchesSigners;
+        });
+      }
+      res.json(list);
     }
   } catch (err) {
     res.status(500).json({ error: "Erro de processamento técnico." });
@@ -1497,11 +1506,17 @@ app.post("/api/contracts", async (req, res) => {
 
   const newId = "contract_" + Math.random().toString(36).substr(2, 9);
   
-  const defaultSigners: SignerStatus[] = signers && signers.length > 0 
-    ? signers.map((s: any) => ({ name: s.name, email: s.email, status: "pending" }))
+  const defaultSigners = signers && signers.length > 0 
+    ? signers.map((s: any) => ({
+        name: s.name,
+        email: (s.email || "").toLowerCase().trim(),
+        role: s.role || "Signatário",
+        requiredToSign: s.requiredToSign !== false,
+        status: "pending"
+      }))
     : [
-        { name: "Bruno Carvalho", email: "consultor@bellacortintas.com.br", status: "pending" },
-        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", status: "pending" }
+        { name: clientName, email: clientEmail.toLowerCase().trim(), role: "Cliente Contratante", requiredToSign: true, status: "pending" },
+        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Administrador Técnico", requiredToSign: true, status: "pending" }
       ];
 
   const contractValue = value !== undefined && value !== "" && value !== null && !isNaN(Number(value)) ? Number(value) : null;
@@ -1530,7 +1545,7 @@ app.post("/api/contracts", async (req, res) => {
         return res.status(500).json({ error: "Erro de banco de dados ao salvar contrato." });
       }
     } else {
-      const newContract: Contract = {
+      const newContract: any = {
         id: newId,
         title,
         clientName,
@@ -1674,7 +1689,10 @@ app.post("/api/contracts/:id/sign", async (req, res) => {
         signatureType: signatureType || "drawn"
       };
 
-      const allSigned = signers.every((s: any) => s.status === "signed");
+      const requiredSigners = signers.filter((s: any) => s.requiredToSign !== false);
+      const allSigned = requiredSigners.length > 0
+        ? requiredSigners.every((s: any) => s.status === "signed")
+        : true;
 
       const { error: updateError } = await supabase
         .from("contracts")
@@ -1709,7 +1727,7 @@ app.post("/api/contracts/:id/sign", async (req, res) => {
         return res.status(400).json({ error: "Este contrato já foi totalmente assinado e está bloqueado." });
       }
 
-      const signerIndex = contract.signers.findIndex((s: any) => s.email.toLowerCase() === signerEmail.toLowerCase());
+      const signerIndex = contract.signers.findIndex((s: any) => s.email.toLowerCase() === signerEmail.toLowerCase().trim());
       if (signerIndex === -1) {
         return res.status(400).json({ error: "E-mail de signatário não correspondente aos representantes homologados desse contrato." });
       }
@@ -1729,7 +1747,11 @@ app.post("/api/contracts/:id/sign", async (req, res) => {
       contract.signatureIp = signatureIp;
       contract.signedAt = new Date().toISOString();
 
-      const allSigned = contract.signers.every((s: any) => s.status === "signed");
+      const requiredSigners = contract.signers.filter((s: any) => s.requiredToSign !== false);
+      const allSigned = requiredSigners.length > 0
+        ? requiredSigners.every((s: any) => s.status === "signed")
+        : true;
+
       if (allSigned) {
         contract.status = "signed";
       }
@@ -1959,6 +1981,79 @@ app.post("/api/billing/:id/pay", async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: "Erro técnico ao conciliar pagamento." });
+  }
+});
+
+// Edit specific billing item (Admin option)
+app.put("/api/billing/:id", async (req, res) => {
+  const { id } = req.params;
+  const { amount, dueDate, description, status } = req.body;
+
+  try {
+    if (supabase) {
+      const updates: any = {};
+      if (amount !== undefined) updates.amount = Number(amount);
+      if (dueDate !== undefined) updates.due_date = dueDate;
+      if (description !== undefined) updates.description = description;
+      if (status !== undefined) updates.status = status;
+
+      const { error } = await supabase
+        .from("billing_items")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) {
+        return res.status(500).json({ error: "Erro de banco de dados ao atualizar faturamento." });
+      }
+
+      const { data: updated } = await supabase
+        .from("billing_items")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      return res.json(mapBillingItemFromDb(updated));
+    } else {
+      const bill = db.billingItems.find((b: any) => b.id === id);
+      if (!bill) return res.status(404).json({ error: "Faturamento não encontrado." });
+
+      if (amount !== undefined) bill.amount = Number(amount);
+      if (dueDate !== undefined) bill.dueDate = dueDate;
+      if (description !== undefined) bill.description = description;
+      if (status !== undefined) bill.status = status;
+
+      saveDatabase();
+      res.json(bill);
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Erro interno ao atualizar faturamento." });
+  }
+});
+
+// Delete specific billing item (Admin option)
+app.delete("/api/billing/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (supabase) {
+      const { error } = await supabase
+        .from("billing_items")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        return res.status(500).json({ error: "Erro de banco de dados ao excluir fatura." });
+      }
+    } else {
+      const idx = db.billingItems.findIndex((b: any) => b.id === id);
+      if (idx === -1) return res.status(404).json({ error: "Faturamento não encontrado." });
+
+      db.billingItems.splice(idx, 1);
+      saveDatabase();
+    }
+    res.json({ success: true, message: "Fatura apagada com sucesso." });
+  } catch (err) {
+    res.status(500).json({ error: "Erro técnico ao excluir fatura." });
   }
 });
 

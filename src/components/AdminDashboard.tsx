@@ -14,7 +14,7 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "clients" | "billing" | "contracts">("contracts");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "clients" | "billing" | "contracts">("dashboard");
   
   // Lists from backend
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -358,24 +358,28 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
           {/* Right actions */}
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-500/10 uppercase font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Banco de Dados Ativo
-            </span>
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
-              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+            <a 
+              href="/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-[#0052FF] hover:text-[#0040D0] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg text-[10px] font-extrabold tracking-tight transition-all flex items-center gap-1 cursor-pointer"
+            >
+              Portal do Assinante
+            </a>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
               devrogeriojunior
             </div>
             <button
               onClick={onLogout}
               title="Sair do Portal"
-              className="p-1.5 hover:bg-slate-100 hover:text-red-600 text-slate-400 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+              className="p-1.5 hover:bg-slate-100 hover:text-red-650 text-slate-400 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
             >
               <LogOut className="w-4 h-4" />
             </button>
           </div>
-
         </div>
+
       </header>
 
       {/* MAIN CONTAINER */}
