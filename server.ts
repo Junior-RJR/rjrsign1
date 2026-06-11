@@ -86,6 +86,7 @@ function mapLeadFromDb(row: any): Lead {
     utmCampaign: row.utm_campaign,
     utmContent: row.utm_content,
     createdAt: row.created_at
+    
   };
 }
 
