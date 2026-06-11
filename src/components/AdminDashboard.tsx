@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   FileText, Users, Receipt, LayoutDashboard, Plus, 
   Search, LogOut, CheckCircle2, Clock, Trash2, Calendar,
-  DollarSign, FileDown, CheckCircle, RefreshCw, Send, AlertCircle, Edit3
+  DollarSign, FileDown, CheckCircle, RefreshCw, Send, AlertCircle, Edit3,
+  Check, X, Edit
 } from "lucide-react";
 import { formatCurrency, formatDate } from "../utils";
 import { RegisteredClient, Contract, BillingItem } from "../types";
@@ -56,10 +57,49 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const [billingDescription, setBillingDescription] = useState("");
   const [billingDueDate, setBillingDueDate] = useState("");
   const [billingType, setBillingType] = useState<"monthly_fee" | "additional">("monthly_fee");
+  const [selectedBillingClientId, setSelectedBillingClientId] = useState<string | null>(null);
+  const [inlineMonthlyFee, setInlineMonthlyFee] = useState("");
+  const [isUpdatingMonthlyFee, setIsUpdatingMonthlyFee] = useState(false);
+
+  // New features premium state engines
+  const [billingViewMode, setBillingViewMode] = useState<"clients" | "flat">("clients");
+  const [selectedClientBillingDetail, setSelectedClientBillingDetail] = useState<RegisteredClient | null>(null);
+  const [newBillAmount, setNewBillAmount] = useState("");
+  const [newBillDescription, setNewBillDescription] = useState("");
+  const [newBillDueDate, setNewBillDueDate] = useState("");
+  const [newBillType, setNewBillType] = useState<"monthly_fee" | "additional">("monthly_fee");
+  const [isSubmittingNewBill, setIsSubmittingNewBill] = useState(false);
+
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
+  const [isEditContractModalOpen, setIsEditContractModalOpen] = useState(false);
+  const [formSigners, setFormSigners] = useState<{ name: string, email: string, requiredToSign: boolean, status: string }[]>([]);
+  const [tempSignerName, setTempSignerName] = useState("");
+  const [tempSignerEmail, setTempSignerEmail] = useState("");
+  const [tempSignerRequired, setTempSignerRequired] = useState(true);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Pre-populate inline state when active selection changes
+  useEffect(() => {
+    if (selectedBillingClientId && clients.length > 0) {
+      const activeClient = clients.find(c => c.id === selectedBillingClientId);
+      if (activeClient) {
+        setInlineMonthlyFee(String(activeClient.monthlyFee ?? "179.90"));
+        setBillingAmount(String(activeClient.monthlyFee ?? "179.90"));
+      }
+    }
+  }, [selectedBillingClientId, clients]);
+
+  useEffect(() => {
+    if (selectedClientBillingDetail) {
+      setNewBillAmount(String(selectedClientBillingDetail.monthlyFee ?? "179.90"));
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 30);
+      setNewBillDueDate(futureDate.toISOString().split("T")[0]);
+    }
+  }, [selectedClientBillingDetail]);
 
   const loadData = async () => {
     setLoading(true);
@@ -71,12 +111,56 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       ]);
 
       if (resContracts.ok) setContracts(await resContracts.json());
-      if (resClients.ok) setClients(await resClients.json());
+      if (resClients.ok) {
+        const cList = await resClients.json();
+        setClients(cList);
+        if (cList.length > 0) {
+          setSelectedBillingClientId(prev => prev || cList[0].id);
+        }
+      }
       if (resBillings.ok) setBillings(await resBillings.json());
     } catch (err) {
       console.error("Erro ao carregar dados", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openNewContractModal = () => {
+    setContractTitle("");
+    setSelectedClientIndex(-1);
+    setCustomClientName("");
+    setCustomClientEmail("");
+    setContractValue("");
+    setContractCategory("Prestação de Serviços");
+    setContractContent("");
+    setFormSigners([
+      { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", requiredToSign: true, status: "pending" }
+    ]);
+    setIsContractModalOpen(true);
+  };
+
+  const handleClientSelected = (idx: number) => {
+    setSelectedClientIndex(idx);
+    if (idx >= 0) {
+      const selected = clients[idx];
+      setCustomClientName("");
+      setCustomClientEmail("");
+      
+      const initialSigners = [
+        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", requiredToSign: true, status: "pending" },
+        { 
+          name: selected.representatives?.[0]?.name || selected.name, 
+          email: selected.email, 
+          requiredToSign: true, 
+          status: "pending" 
+        }
+      ];
+      setFormSigners(initialSigners);
+    } else {
+      setFormSigners([
+        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", requiredToSign: true, status: "pending" }
+      ]);
     }
   };
 
@@ -98,12 +182,12 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       return;
     }
 
-    try {
-      const contractSigners = [
-        { name: finalClientName, email: finalClientEmail, status: "pending" },
-        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", status: "pending" }
-      ];
+    if (formSigners.length === 0) {
+      alert("Por favor, adicione pelo menos um signatário obrigatório.");
+      return;
+    }
 
+    try {
       const res = await fetch("/api/contracts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,9 +196,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
           clientName: finalClientName,
           clientEmail: finalClientEmail.toLowerCase().trim(),
           content: contractContent,
-          value: parseFloat(contractValue) || 0,
+          value: contractValue ? parseFloat(contractValue) : null,
           category: contractCategory,
-          signers: contractSigners
+          signers: formSigners
         })
       });
 
@@ -128,6 +212,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         setCustomClientEmail("");
         setContractValue("");
         setContractContent("");
+        setFormSigners([]);
         loadData();
       } else {
         const err = await res.json();
@@ -265,6 +350,29 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     }
   };
 
+  // Update client monthly fee inline
+  const handleUpdateClientMonthlyFee = async (clientId: string, newFee: number) => {
+    setIsUpdatingMonthlyFee(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monthlyFee: newFee })
+      });
+      if (res.ok) {
+        alert("Valor da mensalidade contratual atualizado com sucesso!");
+        loadData();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Erro ao atualizar mensalidade contratual.");
+      }
+    } catch (e) {
+      alert("Erro ao conectar ao servidor.");
+    } finally {
+      setIsUpdatingMonthlyFee(false);
+    }
+  };
+
   // Delete Client
   const handleDeleteClient = async (id: string, name: string) => {
     if (!confirm(`Deseja realmente remover o cliente "${name}" do sistema? Todos os faturamentos e contas associadas permanecerão em histórico.`)) {
@@ -289,7 +397,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     if (!confirm("Deseja realmente excluir este termo de contrato?")) return;
     try {
       const res = await fetch(`/api/contracts/${id}`, { method: "DELETE" });
-      // In server.ts we might need default delete or handle it
       alert("Ação concluída.");
       loadData();
     } catch (e) {}
@@ -298,6 +405,159 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   // Send Contract Invite email Simulation
   const handleSendInvite = async (contractId: string) => {
     alert("Convite de assinatura digital reenviado para o e-mail do representante legal com sucesso!");
+  };
+
+  // Reactivate / Reset contract signatures
+  const handleReactivateContract = async (id: string) => {
+    if (!confirm("Deseja reestruturar e liberar este contrato para novas assinaturas? Isso limpará todas as firmas já coletadas.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/contracts/${id}/reactivate`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        alert("Contrato reativado e liberado para novas assinaturas com sucesso!");
+        loadData();
+      } else {
+        const err = await res.json();
+        alert("Erro ao reativar contrato: " + err.error);
+      }
+    } catch (e) {
+      alert("Erro de conexão ao reativar contrato.");
+    }
+  };
+
+  // Start edit contract modal
+  const handleStartEditContract = (c: Contract) => {
+    setEditingContract(c);
+    setContractTitle(c.title);
+    setContractCategory(c.category);
+    setContractValue(c.value !== null && c.value !== undefined ? String(c.value) : "");
+    setContractContent(c.content);
+    setFormSigners([...(c.signers || [])]);
+    setIsEditContractModalOpen(true);
+  };
+
+  // Save changes to contract
+  const handleSaveEditedContract = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContract) return;
+
+    if (formSigners.length === 0) {
+      alert("Por favor, adicione pelo menos um signatário.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/contracts/${editingContract.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: contractTitle,
+          category: contractCategory,
+          value: contractValue ? parseFloat(contractValue) : null,
+          content: contractContent,
+          signers: formSigners
+        })
+      });
+
+      if (res.ok) {
+        alert("Contrato atualizado com sucesso!");
+        setIsEditContractModalOpen(false);
+        setEditingContract(null);
+        setFormSigners([]);
+        loadData();
+      } else {
+        const err = await res.json();
+        alert("Erro ao atualizar: " + err.error);
+      }
+    } catch (e) {
+      alert("Erro ao conectar ao servidor para atualizar o contrato.");
+    }
+  };
+
+  // Helper methods to edit formSigners
+  const handleAddFormSigner = () => {
+    if (!tempSignerName || !tempSignerEmail) {
+      alert("Informe o nome e e-mail do assinante.");
+      return;
+    }
+
+    const emailFormated = tempSignerEmail.toLowerCase().trim();
+    if (formSigners.some(s => s.email.toLowerCase().trim() === emailFormated)) {
+      alert("Este e-mail de assinante já está cadastrado.");
+      return;
+    }
+
+    setFormSigners([
+      ...formSigners,
+      {
+        name: tempSignerName,
+        email: emailFormated,
+        requiredToSign: tempSignerRequired,
+        status: "pending"
+      }
+    ]);
+
+    // Reset inputs
+    setTempSignerName("");
+    setTempSignerEmail("");
+    setTempSignerRequired(true);
+  };
+
+  const handleRemoveFormSigner = (emailToRemove: string) => {
+    setFormSigners(formSigners.filter(s => s.email.toLowerCase().trim() !== emailToRemove.toLowerCase().trim()));
+  };
+
+  // Create billing from client detail screen
+  const handleCreateClientBillingFromDetail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClientBillingDetail) return;
+
+    if (!newBillAmount || !newBillDueDate) {
+      alert("Por favor, preencha o valor e a data de vencimento.");
+      return;
+    }
+
+    setIsSubmittingNewBill(true);
+    try {
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientName: selectedClientBillingDetail.name,
+          clientEmail: selectedClientBillingDetail.email,
+          type: newBillType,
+          amount: parseFloat(newBillAmount) || 0,
+          dueDate: newBillDueDate,
+          description: newBillDescription || `${newBillType === "monthly_fee" ? "Mensalidade Fixa" : "Serviço Técnico Adicional"} - RJR Sign`
+        })
+      });
+
+      if (res.ok) {
+        alert("Faturamento lançado com sucesso!");
+        // Reset fields
+        setNewBillAmount("");
+        setNewBillDescription("");
+        setNewBillDueDate("");
+        setNewBillType("monthly_fee");
+        
+        // Reload data
+        await loadData();
+        
+        // Refresh detail modal object in state to re-calculate stats immediately
+        const freshCl = clients.find(cl => cl.id === selectedClientBillingDetail.id);
+        if (freshCl) setSelectedClientBillingDetail(freshCl);
+      } else {
+        const err = await res.json();
+        alert("Erro ao lançar faturamento: " + err.error);
+      }
+    } catch (err) {
+      alert("Falha ao registrar cobrança.");
+    } finally {
+      setIsSubmittingNewBill(false);
+    }
   };
 
   // Calculations for UI metrics
@@ -400,17 +660,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
           {/* Right actions */}
           <div className="flex items-center gap-3">
-            <a 
-              href="/" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-[#0052FF] hover:text-[#0040D0] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg text-[10px] font-extrabold tracking-tight transition-all flex items-center gap-1 cursor-pointer"
-            >
-              Portal do Assinante
-            </a>
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
-              devrogeriojunior
+            <div className="text-right hidden md:block">
+              <strong className="text-xs text-slate-900 block font-semibold">Administrador</strong>
+              <span className="text-[10px] text-slate-400 font-mono block leading-none mt-0.5">devrogeriojunior@gmail.com</span>
             </div>
             <button
               onClick={onLogout}
@@ -445,7 +697,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 </p>
               </div>
               <button
-                onClick={() => setIsContractModalOpen(true)}
+                onClick={openNewContractModal}
                 className="bg-[#0052FF] hover:bg-[#0040D0] text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-4 h-4 shrink-0" />
@@ -595,19 +847,40 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                     </div>
 
                     {/* Actions block */}
-                    <div className="flex gap-2 self-end lg:self-auto shrink-0">
+                    <div className="flex flex-wrap gap-2 self-end lg:self-auto shrink-0">
                       <button
                         onClick={() => handleSendInvite(c.id)}
-                        className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xxs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Re-enviar Notificação de Assinatura"
+                        className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xxs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-slate-200"
+                        title="Reenviar link de assinatura para e-mails pendentes"
                       >
-                        <Send className="w-3.5 h-3.5" />
-                        Notificar
+                        <Send className="w-3 h-3 text-slate-500" />
+                        Reenviar
                       </button>
+                      
+                      <button
+                        onClick={() => handleStartEditContract(c)}
+                        className="py-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 text-[#0052FF] text-xxs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-blue-150"
+                        title="Editar minuta legal e regulagem de assinantes"
+                      >
+                        <Edit className="w-3 h-3 text-[#0052FF]" />
+                        Editar
+                      </button>
+
+                      {(c.status === "signed" || c.signers?.some(s => s.status === "signed")) ? (
+                        <button
+                          onClick={() => handleReactivateContract(c.id)}
+                          className="py-1.5 px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xxs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer border border-amber-200"
+                          title="Voltar contrato para pendente e liberar novas assinaturas"
+                        >
+                          <RefreshCw className="w-3 h-3 text-amber-600" />
+                          Liberar / Reativar
+                        </button>
+                      ) : null}
+
                       <button
                         onClick={() => handleDeleteContract(c.id)}
                         className="p-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg transition-colors cursor-pointer border border-red-100"
-                        title="Excluir Contrato"
+                        title="Excluir definitamente do portal"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -729,8 +1002,6 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
           </div>
         )}
-
-        {/* TAB COBRANÇAS / MENSALIDADES */}
         {activeTab === "billing" && (
           <div className="space-y-6">
             
@@ -740,11 +1011,11 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
                   Gestão Financeira & Cobranças
                   <span className="bg-blue-50 text-[#0052FF] text-xxs font-black px-2 py-0.5 rounded-full border border-blue-100">
-                    Histórico Geral
+                    {billingViewMode === "clients" ? "Visão por Cliente" : "Razão Geral"}
                   </span>
                 </h1>
                 <p className="text-slate-500 text-xs mt-1 leading-relaxed">
-                  Controle as mensalidades fixas de serviços técnicos, embaque taxas adicionais, gere ordens de faturamentos e defina status de liquidação.
+                  Controle as mensalidades fixas de serviços técnicos, fature serviços adicionais, e defina status de liquidação.
                 </p>
               </div>
               <button
@@ -752,7 +1023,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 className="bg-[#0052FF] hover:bg-[#0040D0] text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-4 h-4 shrink-0" />
-                Lançar Cobrança
+                Lançar Cobrança Avulsa
               </button>
             </div>
 
@@ -783,84 +1054,232 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
             </div>
 
-            {/* Billings List */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm overflow-hidden">
-              <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 block mb-4">Razão de Lançamentos de Cobrança</span>
-              
-              {billingFiltered.length === 0 ? (
-                <div className="text-center py-10 text-slate-400 text-xs text-medium">
-                  Nenhuma fatura localizada no banco de dados.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xxs">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-slate-400 font-extrabold uppercase">
-                        <th className="py-3 px-2">Identificador / Data</th>
-                        <th className="py-3 px-2">Cliente Destinatário</th>
-                        <th className="py-3 px-2">Descrição de Lançamento</th>
-                        <th className="py-3 px-2 font-mono">Vencimento</th>
-                        <th className="py-3 px-2">Valor Faturado</th>
-                        <th className="py-3 px-2 text-center">Status</th>
-                        <th className="py-3 px-2 text-right">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {billingFiltered.map(b => (
-                        <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3.5 px-2">
-                            <span className="font-mono text-slate-800 font-black block">{b.id}</span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">{formatDate(b.createdAt)}</span>
-                          </td>
-                          <td className="py-3.5 px-2">
-                            <strong className="text-slate-800 font-bold block">{b.clientName}</strong>
-                            <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">{b.clientEmail}</span>
-                          </td>
-                          <td className="py-3.5 px-2 font-medium max-w-xs truncate text-slate-600" title={b.description}>
-                            {b.description}
-                          </td>
-                          <td className="py-3.5 px-2 font-mono font-bold text-slate-500">
-                            {formatDate(b.dueDate)}
-                          </td>
-                          <td className="py-3.5 px-2 font-mono font-extrabold text-slate-900">
-                            R$ {b.amount.toFixed(2)}
-                          </td>
-                          <td className="py-3.5 px-2 text-center">
-                            <span className={`inline-block py-0.5 px-2.5 rounded-full font-bold uppercase text-[8px] border ${
-                              b.status === "paid" 
-                                ? "bg-green-50 text-green-600 border-green-200" 
-                                : "bg-amber-50 text-amber-600 border-amber-200"
-                            }`}>
-                              {b.status === "paid" ? "Liquidado" : "Aberto"}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-2 text-right">
-                            {b.status === "pending" ? (
-                              <button
-                                onClick={async () => {
-                                  if (confirm(`Deseja liquidar manualmente a fatura "${b.id}" no valor de R$ ${b.amount}?`)) {
-                                    const res = await fetch(`/api/billing/${b.id}/pay`, { method: "POST" });
-                                    if (res.ok) {
-                                      alert("Status liquidado!");
-                                      loadData();
-                                    }
-                                  }
-                                }}
-                                className="bg-green-50 hover:bg-green-100 text-green-650 px-2 py-1 border border-green-150 rounded text-xxs font-bold transition-colors cursor-pointer"
-                              >
-                                Liquidar
-                              </button>
-                            ) : (
-                              <span className="text-slate-400 font-semibold">• Quitada</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            {/* View selectors tab switcher with beautiful style */}
+            <div className="flex bg-slate-100 p-1 rounded-xl self-start border border-slate-200/60 text-xs font-bold gap-1 w-fit">
+              <button
+                onClick={() => setBillingViewMode("clients")}
+                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                  billingViewMode === "clients" 
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/50" 
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Users className="w-4 h-4 text-blue-600" />
+                Filtrar por Cliente
+              </button>
+              <button
+                onClick={() => setBillingViewMode("flat")}
+                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                  billingViewMode === "flat" 
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/50" 
+                    : "text-[#1E293B] hover:text-black"
+                }`}
+              >
+                <Receipt className="w-4 h-4 text-amber-500" />
+                Histórico Geral de Cobranças ({billings.length})
+              </button>
             </div>
+
+            {/* Render View Mode content */}
+            {billingViewMode === "clients" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {clients.map((c) => {
+                  const clientBillings = billings.filter(b => b.clientEmail.toLowerCase().trim() === c.email.toLowerCase().trim());
+                  const paidSum = clientBillings.filter(b => b.status === "paid").reduce((sum, b) => sum + b.amount, 0);
+                  const pendingSum = clientBillings.filter(b => b.status === "pending").reduce((sum, b) => sum + b.amount, 0);
+
+                  return (
+                    <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                      
+                      {/* Name & Representative Details */}
+                      <div>
+                        <div className="flex items-start justify-between">
+                          <div className="bg-blue-50 text-[#0052FF] font-sans font-black p-3 rounded-xl text-sm leading-none shrink-0 h-11 w-11 flex items-center justify-center uppercase border border-blue-100">
+                            {c.name.slice(0, 2)}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono font-bold uppercase bg-slate-50 border border-slate-150 px-2 py-0.5 rounded-full">
+                            Cliente RJR
+                          </span>
+                        </div>
+                        <h3 className="font-extrabold text-sm text-slate-900 tracking-tight mt-3 truncate" title={c.name}>
+                          {c.name}
+                        </h3>
+                        <span className="text-slate-400 text-[10px] font-mono block mt-0.5 truncate">{c.email}</span>
+                      </div>
+
+                      {/* Recurrent fee contract billing value editable inline */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-[9px] uppercase font-extrabold text-slate-400 block tracking-wider">MENSALIDADE FIXA</span>
+                          <div className="mt-1">
+                            {selectedBillingClientId === c.id ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-bold text-slate-400 font-mono">R$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="w-20 border border-blue-500 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-slate-800 focus:outline-none"
+                                  value={inlineMonthlyFee}
+                                  onChange={(e) => setInlineMonthlyFee(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      handleUpdateClientMonthlyFee(c.id, parseFloat(inlineMonthlyFee) || 0);
+                                      setSelectedBillingClientId(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => {
+                                    handleUpdateClientMonthlyFee(c.id, parseFloat(inlineMonthlyFee) || 0);
+                                    setSelectedBillingClientId(null);
+                                  }}
+                                  className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                  title="Salvar"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setSelectedBillingClientId(null)}
+                                  className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                                  title="Cancelar"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <strong className="text-xs font-mono font-extrabold text-[#0052FF]">
+                                  R$ {Number(c.monthlyFee || 0).toFixed(2)}
+                                </strong>
+                                <button
+                                  onClick={() => {
+                                    setSelectedBillingClientId(c.id);
+                                    setInlineMonthlyFee(String(c.monthlyFee || "179.90"));
+                                  }}
+                                  className="text-slate-450 hover:text-[#0052FF] p-1 rounded transition-colors"
+                                  title="Alterar mensalidade contratual"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status Summary Counts */}
+                        <div className="text-right">
+                          <span className="text-[9px] uppercase font-extrabold text-slate-400 block tracking-wider">RESUMO</span>
+                          <span className="text-[10px] block mt-1 font-semibold text-slate-600">
+                            <strong className="text-green-600 font-bold">{clientBillings.filter(x => x.status === "paid").length}</strong> pagas •{" "}
+                            <strong className="text-amber-600 font-bold">{clientBillings.filter(x => x.status === "pending").length}</strong> abertas
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stat balances values */}
+                      <div className="grid grid-cols-2 gap-2 text-center text-xxs bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="text-[8px] font-bold text-slate-450 uppercase block">Total Pago</span>
+                          <strong className="font-mono text-green-600 text-xs font-bold block mt-0.5">R$ {paidSum.toFixed(2)}</strong>
+                        </div>
+                        <div className="border-l border-slate-150">
+                          <span className="text-[8px] font-bold text-slate-450 uppercase block">Total Aberto</span>
+                          <strong className="font-mono text-amber-600 text-xs font-bold block mt-0.5">R$ {pendingSum.toFixed(2)}</strong>
+                        </div>
+                      </div>
+
+                      {/* Detail screen opener */}
+                      <button
+                        onClick={() => setSelectedClientBillingDetail(c)}
+                        className="w-full text-center py-2.5 text-xs font-bold bg-[#0052FF]/10 text-[#0052FF] hover:bg-[#0052FF]/25 border border-[#0052FF]/15 hover:border-[#0052FF]/30 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Receipt className="w-4 h-4 shrink-0" />
+                        Histórico & Novo Lançamento
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm overflow-hidden animate-fade-in">
+                <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 block mb-4">Razão Geral de Lançamentos de Cobrança</span>
+                
+                {billingFiltered.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400 text-xs text-medium">
+                    Nenhuma fatura localizada no banco de dados.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xxs">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-extrabold uppercase">
+                          <th className="py-3 px-2">Identificador / Data</th>
+                          <th className="py-3 px-2">Cliente Destinatário</th>
+                          <th className="py-3 px-2">Descrição de Lançamento</th>
+                          <th className="py-3 px-2 font-mono">Vencimento</th>
+                          <th className="py-3 px-2">Valor Faturado</th>
+                          <th className="py-3 px-2 text-center">Status</th>
+                          <th className="py-3 px-2 text-right">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {billingFiltered.map(b => (
+                          <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3.5 px-2">
+                              <span className="font-mono text-slate-800 font-black block">{b.id}</span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5">{formatDate(b.createdAt)}</span>
+                            </td>
+                            <td className="py-3.5 px-2">
+                              <strong className="text-slate-800 font-bold block">{b.clientName}</strong>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">{b.clientEmail}</span>
+                            </td>
+                            <td className="py-3.5 px-2 font-medium max-w-xs truncate text-slate-600" title={b.description}>
+                              {b.description}
+                            </td>
+                            <td className="py-3.5 px-2 font-mono font-bold text-slate-500">
+                              {formatDate(b.dueDate)}
+                            </td>
+                            <td className="py-3.5 px-2 font-mono font-extrabold text-slate-900">
+                              R$ {b.amount.toFixed(2)}
+                            </td>
+                            <td className="py-3.5 px-2 text-center">
+                              <span className={`inline-block py-0.5 px-2.5 rounded-full font-bold uppercase text-[8px] border ${
+                                b.status === "paid" 
+                                  ? "bg-green-50 text-green-600 border-green-200" 
+                                  : "bg-amber-50 text-amber-600 border-amber-200"
+                              }`}>
+                                {b.status === "paid" ? "Liquidado" : "Aberto"}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-2 text-right">
+                              {b.status === "pending" ? (
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`Deseja liquidar manualmente a fatura "${b.id}" no valor de R$ ${b.amount}?`)) {
+                                      const res = await fetch(`/api/billing/${b.id}/pay`, { method: "POST" });
+                                      if (res.ok) {
+                                        alert("Status liquidado!");
+                                        loadData();
+                                      }
+                                    }
+                                  }}
+                                  className="bg-green-50 hover:bg-green-100 text-green-650 px-2 py-1 border border-green-150 rounded text-xxs font-bold transition-colors cursor-pointer"
+                                >
+                                  Liquidar
+                                </button>
+                              ) : (
+                                <span className="text-slate-400 font-semibold">• Quitada</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         )}
@@ -1031,11 +1450,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                       value={selectedClientIndex}
                       onChange={(e) => {
                         const idx = parseInt(e.target.value);
-                        setSelectedClientIndex(idx);
-                        if (idx >= 0) {
-                          setCustomClientName("");
-                          setCustomClientEmail("");
-                        }
+                        handleClientSelected(idx);
                       }}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
                     >
@@ -1057,7 +1472,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                       <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nome Completo do Cliente *</label>
                       <input
                         type="text"
-                        placeholder="Ex: Bellacor Tintas Ltda"
+                        placeholder="Ex: Empresa de Tecnologia Ltda"
                         value={customClientName}
                         onChange={(e) => setCustomClientName(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
@@ -1068,7 +1483,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                       <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">E-mail do Representante Legal *</label>
                       <input
                         type="email"
-                        placeholder="Ex: consultor@bellacortintas.com.br"
+                        placeholder="Ex: consultor@empresa.com.br"
                         value={customClientEmail}
                         onChange={(e) => setCustomClientEmail(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono"
@@ -1078,10 +1493,84 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                   </motion.div>
                 )}
 
+                {/* Dynamic Signers Customized Table Panel */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">Fluxo de Assinatura (Signatários Regulamentados)</label>
+                  
+                  {formSigners.length === 0 ? (
+                    <div className="text-[11px] text-slate-400 italic mb-3">Nenhum signatário adicionado para assinar este documento.</div>
+                  ) : (
+                    <div className="space-y-1.5 mb-3 max-h-32 overflow-y-auto">
+                      {formSigners.map((s, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-150 text-xs">
+                          <div className="truncate">
+                            <strong className="text-slate-800 font-extrabold">{s.name}</strong> 
+                            <span className="text-slate-400 text-[10px] block font-mono leading-none mt-0.5">{s.email}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={s.requiredToSign !== false}
+                                onChange={(e) => {
+                                  const updated = [...formSigners];
+                                  updated[idx] = { ...updated[idx], requiredToSign: e.target.checked };
+                                  setFormSigners(updated);
+                                }}
+                                className="rounded text-[#0052FF]"
+                              />
+                              Inscrito para Assinar
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFormSigner(s.email)}
+                              className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"
+                              title="Excluir"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Inline Adicionar Co-Signatário Form */}
+                  <div className="border-t border-slate-200 pt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Nome do Co-Signatário</span>
+                      <input
+                        type="text"
+                        placeholder="Ex: Pedro de Souza"
+                        value={tempSignerName}
+                        onChange={(e) => setTempSignerName(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xxs focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">E-mail de Assinatura</span>
+                      <input
+                        type="email"
+                        placeholder="Ex: pedro@email.com"
+                        value={tempSignerEmail}
+                        onChange={(e) => setTempSignerEmail(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xxs font-mono focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddFormSigner}
+                      className="bg-slate-900 hover:bg-slate-800 text-white rounded-lg p-1.5 text-xxs font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Adicionar
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cláusulas do Termo (Formato Markdown Permitido) *</label>
                   <textarea
-                    rows={8}
+                    rows={6}
                     placeholder="# TERMO INSTRUMENTAL DE PRESTAÇÃO DE SERVIÇOS..."
                     value={contractContent}
                     onChange={(e) => setContractContent(e.target.value)}
@@ -1413,6 +1902,331 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
         </div>
       </footer>
+
+      {/* ================= MODAL: EDIT EXISTING CONTRACT ================= */}
+      <AnimatePresence>
+        {isEditContractModalOpen && editingContract && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden text-slate-800"
+            >
+              <div className="bg-[#0052FF] text-white p-5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold">Editar Contrato Comercial</h3>
+                  <span className="text-[10px] text-blue-100 block mt-0.5">Editando ID: {editingContract.id}</span>
+                </div>
+                <button
+                  onClick={() => setIsEditContractModalOpen(false)}
+                  className="p-1 px-3 bg-blue-700 hover:bg-blue-600 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                >
+                  X
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditedContract} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Título do Documento *</label>
+                    <input
+                      type="text"
+                      value={contractTitle}
+                      onChange={(e) => setContractTitle(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Categoria Legal</label>
+                    <select
+                      value={contractCategory}
+                      onChange={(e) => setContractCategory(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none"
+                    >
+                      <option value="Prestação de Serviços">Prestação de Serviços</option>
+                      <option value="Desenvolvimento de TI">Desenvolvimento de TI</option>
+                      <option value="Licença de Uso">Licença de Uso</option>
+                      <option value="Outro">Outros Termos</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Valor Unitário do Contrato (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Sem valor fixado"
+                    value={contractValue}
+                    onChange={(e) => setContractValue(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono font-bold"
+                  />
+                </div>
+
+                {/* Edit Signers Dynamic Table */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">Fluxo de Assinatura (Membros Co-Signatários)</label>
+                  
+                  {formSigners.length === 0 ? (
+                    <div className="text-[11px] text-slate-400 italic mb-3">Sem signatários cadastrados.</div>
+                  ) : (
+                    <div className="space-y-1.5 mb-3 max-h-32 overflow-y-auto">
+                      {formSigners.map((s, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-slate-150 text-xs">
+                          <span className="truncate">
+                            <strong className="text-slate-800 font-extrabold">{s.name}</strong> 
+                            <span className="text-slate-400 text-[10px] block font-mono leading-none mt-0.5">{s.email}</span>
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-[8px] px-2 py-0.5 rounded font-black uppercase ${s.status === 'signed' ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
+                              {s.status === 'signed' ? 'Assinado' : 'Pendente'}
+                            </span>
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={s.requiredToSign !== false}
+                                onChange={(e) => {
+                                  const updated = [...formSigners];
+                                  updated[idx] = { ...updated[idx], requiredToSign: e.target.checked };
+                                  setFormSigners(updated);
+                                }}
+                                className="rounded text-[#0052FF]"
+                              />
+                              Inscrito
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFormSigner(s.email)}
+                              className="text-red-500 hover:bg-red-50 p-1 rounded"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="border-t border-slate-200 pt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Nome</span>
+                      <input
+                        type="text"
+                        placeholder="Ex: Novo Signatário"
+                        value={tempSignerName}
+                        onChange={(e) => setTempSignerName(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xxs"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">E-mail</span>
+                      <input
+                        type="email"
+                        placeholder="Ex: novo@email.com"
+                        value={tempSignerEmail}
+                        onChange={(e) => setTempSignerEmail(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xxs font-mono"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddFormSigner}
+                      className="bg-slate-900 hover:bg-slate-800 text-white rounded-lg p-1.5 text-xxs font-bold animate-pulse-hover"
+                    >
+                      Incluir
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cláusulas Regulatórias (Formato Markdown)</label>
+                  <textarea
+                    rows={6}
+                    value={contractContent}
+                    onChange={(e) => setContractContent(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditContractModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#0052FF] hover:bg-[#0040D0] text-white rounded-lg text-xs font-bold shadow-md transition-all cursor-pointer"
+                  >
+                    Salvar Mudanças
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ================= MODAL: CLIENT BILLING DETAIL TIMELINE & LAUNCHER ================= */}
+      <AnimatePresence>
+        {selectedClientBillingDetail && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl overflow-hidden text-slate-800"
+            >
+              <div className="bg-slate-950 text-white p-5 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold">Resumo Financeiro Individualizado</h3>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Cliente: <strong className="text-blue-400">{selectedClientBillingDetail.name}</strong> ({selectedClientBillingDetail.email})</span>
+                </div>
+                <button
+                  onClick={() => setSelectedClientBillingDetail(null)}
+                  className="p-1 px-3 bg-slate-800 hover:bg-slate-700 font-bold rounded-lg text-xs cursor-pointer"
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 max-h-[75vh] overflow-y-auto">
+                
+                {/* Visual Billing Timeline & Log list (Left - 7 columns) */}
+                <div className="col-span-1 lg:col-span-7 p-6 border-r border-slate-150 space-y-4">
+                  <span className="text-xxs font-black text-slate-400 uppercase tracking-wider block">Histórico de Cobranças Emitidas</span>
+                  
+                  {billings.filter(b => b.clientEmail.toLowerCase().trim() === selectedClientBillingDetail.email.toLowerCase().trim()).length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 text-xs italic">
+                      Nenhuma cobrança registrada para este cliente.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
+                      {billings
+                        .filter(b => b.clientEmail.toLowerCase().trim() === selectedClientBillingDetail.email.toLowerCase().trim())
+                        .map(b => (
+                          <div key={b.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 hover:border-slate-300 transition-colors flex items-center justify-between gap-4 text-xs">
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-block py-0.5 px-2 rounded-full font-bold uppercase text-[7px] border ${
+                                  b.status === "paid" 
+                                    ? "bg-green-50 text-green-600 border-green-200" 
+                                    : "bg-amber-50 text-amber-600 border-amber-200"
+                                }`}>
+                                  {b.status === "paid" ? "Liquidado" : "Pendente"}
+                                </span>
+                                <span className="text-[9px] font-mono text-slate-400">ID: {b.id}</span>
+                              </div>
+                              <span className="font-extrabold text-slate-800 block truncate" title={b.description || "Fatura avulsa"}>
+                                {b.description || "Mensalidade / Lançamento de Serviço"}
+                              </span>
+                              <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                                <span>Vecto: <strong className="font-mono text-slate-500 font-bold">{formatDate(b.dueDate)}</strong></span>
+                                <span>Tipo: <strong className="text-slate-500 font-semibold">{b.type === "monthly_fee" ? "Mensalidade" : "Adicional"}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span className="font-mono font-black text-slate-900 block">R$ {b.amount.toFixed(2)}</span>
+                              
+                              {b.status === "pending" ? (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (confirm(`Liquidar manualmente esta fatura de R$ ${b.amount}?`)) {
+                                      const res = await fetch(`/api/billing/${b.id}/pay`, { method: "POST" });
+                                      if (res.ok) {
+                                        loadData();
+                                        const fresh = clients.find(x => x.id === selectedClientBillingDetail.id);
+                                        if (fresh) setSelectedClientBillingDetail(fresh);
+                                      }
+                                    }
+                                  }}
+                                  className="text-[9px] text-[#0052FF] font-bold hover:underline bg-blue-50 px-2 py-0.5 rounded border border-blue-100 block ml-auto mt-1"
+                                >
+                                  Liquidar
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-green-600 font-extrabold block mt-1">• Quitada</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Create New Bill directly for this specific client (Right - 5 columns) */}
+                <form onSubmit={handleCreateClientBillingFromDetail} className="col-span-1 lg:col-span-5 p-6 bg-slate-50/50 space-y-4">
+                  <span className="text-xxs font-black text-slate-500 uppercase tracking-wider block">Faturar Novo Serviço</span>
+                  
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Tipo de Lançamento</label>
+                    <select
+                      value={newBillType}
+                      onChange={(e) => setNewBillType(e.target.value as any)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs focus:outline-none"
+                    >
+                      <option value="monthly_fee">Mensalidade Contratual</option>
+                      <option value="additional">Taxa de Setup / Adicional</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Valor do Faturamento (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Valor"
+                      value={newBillAmount}
+                      onChange={(e) => setNewBillAmount(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Data de Vencimento</label>
+                    <input
+                      type="date"
+                      value={newBillDueDate}
+                      onChange={(e) => setNewBillDueDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] uppercase font-bold text-slate-400 mb-0.5">Descrição de Cobrança</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Ex: Hospedagem e Manutenção em Nuvem"
+                      value={newBillDescription}
+                      onChange={(e) => setNewBillDescription(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingNewBill}
+                    className="w-full py-2.5 text-xs font-bold text-white bg-[#0052FF] hover:bg-[#0040D0] disabled:bg-slate-300 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-4"
+                  >
+                    {isSubmittingNewBill ? "Registrando..." : "Registrar Faturamento"}
+                  </button>
+                </form>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Terms and Privacy Modal Mount */}
       <AnimatePresence>

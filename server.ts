@@ -154,12 +154,11 @@ function getInitialDatabaseState() {
       createdAt: new Date().toISOString()
     },
     {
-      id: "bellacor-client",
-      name: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
-      email: "consultor@bellacortintas.com.br",
+      id: "cliente-exemplo",
+      name: "Cliente de Exemplo Ltda",
+      email: "gerencia@exemplo.com.br",
       representatives: [
-        { name: "Bruno Carvalho", email: "consultor@bellacortintas.com.br", role: "Diretor Comercial" },
-        { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Suporte TI" }
+        { name: "Carlos Eduardo", email: "gerencia@exemplo.com.br", role: "Representante" }
       ],
       hasChangedPassword: false,
       createdAt: new Date().toISOString()
@@ -169,7 +168,7 @@ function getInitialDatabaseState() {
   // Map password hashes separately to avoid sending them back to client on normal lists
   const passMap: { [userId: string]: string } = {
     "admin-user": adminHashed,
-    "bellacor-client": clientHashed
+    "cliente-exemplo": clientHashed
   };
 
   const defaultContractMarkdown = `
@@ -185,10 +184,9 @@ Por este instrumento particular de Contrato de Prestação de Serviços de Tecno
 * **E-mail de Contato Comercial:** devrogeriojunior@gmail.com
 
 ### **DA CONTRATANTE**
-* **Razão Social:** BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA
-* **CNPJ de Operação Básica:** **04.346.443/0001-90**
-* **Inscrição Estadual (IE):** **219.091.494.113**
-* **Endereço Fabril/Industrial:** Rua Domingos Waldemar Bellucci, 200, Campo de Boituva, Boituva - SP, CEP: **18555-004**
+* **Razão Social:** [RAZÃO SOCIAL DO CLIENTE]
+* **CNPJ de Operação Básica:** [CNPJ DO CLIENTE]
+* **Endereço Escolar ou Comercial:** [ENDEREÇO DO CLIENTE]
 
 ---
 
@@ -308,10 +306,10 @@ Local de Pacto de Serviços: Boituva - SP, 01 de Junho de 2026.
 
   const contracts: Contract[] = [
     {
-      id: "contrato-bellacor-001",
+      id: "contrato-exemplo-001",
       title: "Contrato Instrumental de Hospedagem, Suporte Técnico e TI",
-      clientName: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
-      clientEmail: "consultor@bellacortintas.com.br",
+      clientName: "Cliente de Exemplo Ltda",
+      clientEmail: "gerencia@exemplo.com.br",
       content: defaultContractMarkdown,
       status: "pending",
       createdAt: new Date().toISOString(),
@@ -320,7 +318,7 @@ Local de Pacto de Serviços: Boituva - SP, 01 de Junho de 2026.
       category: "Prestação de Serviços",
       value: 179.90,
       signers: [
-        { name: "Bruno Carvalho", email: "consultor@bellacortintas.com.br", status: "pending" },
+        { name: "Carlos Eduardo", email: "gerencia@exemplo.com.br", status: "pending" },
         { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", status: "pending" }
       ]
     }
@@ -329,25 +327,25 @@ Local de Pacto de Serviços: Boituva - SP, 01 de Junho de 2026.
   const billingItems: BillingItem[] = [
     {
       id: "bill-2026-06",
-      clientName: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
-      clientEmail: "consultor@bellacortintas.com.br",
+      clientName: "Cliente de Exemplo Ltda",
+      clientEmail: "gerencia@exemplo.com.br",
       type: "monthly_fee",
       amount: 179.90,
       dueDate: "2026-07-01",
       status: "pending",
-      description: "Mensalidade e Hospedagem de Banco de Dados de Produção Bellacor - Competência Junho/2026",
+      description: "Mensalidade e Licença de Uso de Banco de Dados - Competência Junho/2026",
       createdAt: new Date().toISOString()
     },
     {
       id: "bill-2026-05",
-      clientName: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
-      clientEmail: "consultor@bellacortintas.com.br",
+      clientName: "Cliente de Exemplo Ltda",
+      clientEmail: "gerencia@exemplo.com.br",
       type: "monthly_fee",
       amount: 179.90,
       dueDate: "2026-06-01",
       paymentDate: "2026-05-29",
       status: "paid",
-      description: "Mensalidade e Hospedagem de Banco de Dados de Produção Bellacor - Competência Maio/2026 (Liquidado)",
+      description: "Mensalidade e Licença de Uso de Banco de Dados - Competência Maio/2026 (Liquidado)",
       createdAt: new Date().toISOString()
     }
   ];
@@ -558,18 +556,17 @@ async function ensureDefaultUsersInSupabase() {
           name: "Rogério Júnior (Admin)",
           email: "devrogeriojunior@gmail.com",
           representatives: [
-            { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Administrador Técnico" }
+            { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Administrador" }
           ],
           current_password: adminHashed,
           has_changed_password: true
         },
         {
-          id: "bellacor-client",
-          name: "BELLACOR INDÚSTRIA E COMÉRCIO DE TINTAS LTDA",
-          email: "consultor@bellacortintas.com.br",
+          id: "cliente-exemplo",
+          name: "Cliente de Exemplo Ltda",
+          email: "gerencia@exemplo.com.br",
           representatives: [
-            { name: "Bruno Carvalho", email: "consultor@bellacortintas.com.br", role: "Diretor Comercial" },
-            { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", role: "Suporte TI" }
+            { name: "Carlos Eduardo", email: "gerencia@exemplo.com.br", role: "Representante" }
           ],
           current_password: clientHashed,
           has_changed_password: false
@@ -1704,8 +1701,9 @@ app.put("/api/contracts/:id", async (req, res) => {
       const updates: any = {};
       if (title !== undefined) updates.title = title;
       if (content !== undefined) updates.content = content;
-      if (value !== undefined) updates.value = Number(value);
+      if (value !== undefined) updates.value = value !== "" && value !== null ? Number(value) : null;
       if (category !== undefined) updates.category = category;
+      if (req.body.signers !== undefined) updates.signers = req.body.signers;
 
       const { error: updateError } = await supabase
         .from("contracts")
@@ -1732,8 +1730,9 @@ app.put("/api/contracts/:id", async (req, res) => {
 
       if (title) contract.title = title;
       if (content) contract.content = content;
-      if (value) contract.value = Number(value);
+      contract.value = value !== undefined && value !== "" && value !== null ? Number(value) : null;
       if (category) contract.category = category;
+      if (req.body.signers) contract.signers = req.body.signers;
 
       saveDatabase();
       res.json(contract);

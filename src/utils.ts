@@ -1,3 +1,5 @@
+import { jsPDF } from "jspdf";
+
 /**
  * RJR Sync helper functions
  */
@@ -83,8 +85,7 @@ export function maskPhone(value: string): string {
  * Generates an elegant and high-contrast legal PDF copy of the contract containing existing signatures
  */
 export function generateContractPDF(contract: any) {
-  const jsPDFClass = require("jspdf").jsPDF;
-  const doc = new jsPDFClass({
+  const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4"
