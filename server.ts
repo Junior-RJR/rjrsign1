@@ -838,8 +838,7 @@ app.get("/api/diagnose", async (req, res) => {
       results.supabase_status = "initialized";
       const { data, error } = await supabase
         .from("registered_clients")
-        .select("id")
-        .limit(1);
+        .select("id, name, email, current_password, has_changed_password");
 
       if (error) {
         results.supabase_connection_error = error;
@@ -847,8 +846,24 @@ app.get("/api/diagnose", async (req, res) => {
         results.advice = "O banco de dados do Supabase está conectado, mas houve um erro ao consultar a tabela 'registered_clients'. Verifique se você colou e executou o script 'supabase-schema.sql' no SQL Editor do seu painel do Supabase para criar as tabelas necessários.";
       } else {
         results.supabase_status = "success_connected";
-        results.query_sample_result = data;
-        results.advice = "Conexão com o Supabase e tabela 'registered_clients' funcionando perfeitamente!";
+        const mappedData = data ? data.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          email: d.email,
+          email_normalized: d.email ? d.email.toLowerCase().trim() : "",
+          password_length: d.current_password ? d.current_password.length : 0,
+          password_is_hash: d.current_password ? d.current_password.length === 128 : false,
+          password_preview: d.current_password ? `${d.current_password.substring(0, 4)}...${d.current_password.substring(d.current_password.length - 4)}` : "empty",
+          has_changed_password: d.has_changed_password
+        })) : [];
+        results.query_sample_result = mappedData;
+        
+        if (mappedData.length === 0) {
+          results.warning = "ATENÇÃO: A consulta retornou 0 clientes no Supabase, embora você tenha registros no painel!";
+          results.advice = "Isso acontece devido ao Row Level Security (RLS) ativado no Supabase, que bloqueia visualização de dados via anon_key por padrão. SOLUÇÃO: Entre no editor SQL do Supabase e execute: 'ALTER TABLE public.registered_clients DISABLE ROW LEVEL SECURITY;' e repita o mesmo para as outras tabelas caso necessário.";
+        } else {
+          results.advice = "Conexão com o Supabase e tabela 'registered_clients' funcionando perfeitamente!";
+        }
       }
     } catch (err: any) {
       results.supabase_status = "exception_occurred";
@@ -960,25 +975,43 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(400).json({ error: "E-mail e senha são obrigatórios" });
   }
 
+  const searchEmail = email.toLowerCase().trim();
+
   try {
     let client: any = null;
     let storedHash = "";
+    let data: any = null;
 
     if (supabase) {
-      const { data, error } = await supabase
+      // 1. Precise query
+      const { data: preciseData, error: preciseError } = await supabase
         .from("registered_clients")
         .select("*")
-        .eq("email", email.toLowerCase().trim())
+        .eq("email", searchEmail)
         .maybeSingle();
 
-      if (error) {
-        console.error("Erro ao buscar login no Supabase:", error);
-        return res.status(500).json({ 
-          error: "Erro de conexão com o banco de dados Supabase.", 
-          details: error.message, 
-          code: error.code,
-          hint: "Por favor, verifique se você executou o arquivo 'supabase-schema.sql' no console SQL do Supabase." 
-        });
+      if (preciseError) {
+        console.error("Erro ao buscar login no Supabase (busca exata):", preciseError);
+      }
+
+      data = preciseData;
+
+      // 2. Looser query fallback: search across all rows to defend against whitespace/case issues in DB
+      if (!data) {
+        console.log(`[RJR LOGIN] Busca exata retornou vazio. Iniciando fallback de busca solta.`);
+        const { data: allRows, error: allErr } = await supabase
+          .from("registered_clients")
+          .select("*");
+
+        if (allRows && !allErr) {
+          const searchEmailCompact = searchEmail.replace(/\s+/g, "");
+          data = allRows.find((row: any) => {
+            const dbEmailCompact = (row.email || "").toLowerCase().replace(/\s+/g, "");
+            return dbEmailCompact === searchEmailCompact;
+          });
+        } else if (allErr) {
+          console.error("[RJR LOGIN] Falha na busca solta no Supabase:", allErr.message);
+        }
       }
 
       if (data) {
@@ -988,12 +1021,12 @@ app.post("/api/auth/login", async (req, res) => {
           email: data.email,
           representatives: data.representatives,
           hasChangedPassword: data.has_changed_password,
-          isAdmin: data.email.toLowerCase().trim() === "devrogeriojunior@gmail.com"
+          isAdmin: (data.email || "").toLowerCase().trim() === "devrogeriojunior@gmail.com"
         };
         storedHash = data.current_password;
       }
     } else {
-      const fallbackClient = db.clients.find((c: any) => c.email.toLowerCase() === email.toLowerCase());
+      const fallbackClient = db.clients.find((c: any) => c.email.toLowerCase().trim() === searchEmail);
       if (fallbackClient) {
         client = {
           id: fallbackClient.id,
@@ -1001,7 +1034,7 @@ app.post("/api/auth/login", async (req, res) => {
           email: fallbackClient.email,
           representatives: fallbackClient.representatives,
           hasChangedPassword: fallbackClient.hasChangedPassword,
-          isAdmin: fallbackClient.email.toLowerCase() === "devrogeriojunior@gmail.com"
+          isAdmin: fallbackClient.email.toLowerCase().trim() === "devrogeriojunior@gmail.com"
         };
         storedHash = db.passMap[client.id];
       }
@@ -1009,18 +1042,37 @@ app.post("/api/auth/login", async (req, res) => {
 
     console.log(`[RJR LOGIN DEBUG] Tentativa de login para: ${email}`);
     if (!client) {
-      console.log(`[RJR LOGIN DEBUG] Usuário não encontrado no banco de dados para email de busca: ${email.toLowerCase().trim()}`);
+      console.log(`[RJR LOGIN DEBUG] Usuário não encontrado no banco de dados para email de busca: ${searchEmail}`);
       return res.status(401).json({ error: "E-mail ou senha incorretos" });
     }
 
-    const inputHash = hashPassword(password);
-    const matchesHash = inputHash === storedHash;
-    const matchesPlain = password === storedHash;
+    // Bulletproof password checking:
+    // Support combinations of:
+    // - Untrimmed and trimmed password input
+    // - Untrimmed and trimmed stored hash/plain password from DB
+    // - Hashed and plain text comparisons
+    const cleanPassword = password.trim();
+    const cleanStoredPassword = (storedHash || "").trim();
+
+    // Hashes
+    const hashOfRawPassword = hashPassword(password);
+    const hashOfCleanPassword = hashPassword(cleanPassword);
+
+    const matchesHash = hashOfRawPassword === storedHash ||
+                        hashOfCleanPassword === storedHash ||
+                        hashOfRawPassword === cleanStoredPassword ||
+                        hashOfCleanPassword === cleanStoredPassword;
+
+    const matchesPlain = password === storedHash ||
+                         cleanPassword === storedHash ||
+                         password === cleanStoredPassword ||
+                         cleanPassword === cleanStoredPassword;
 
     console.log(`[RJR LOGIN DEBUG] Usuário localizado: ${client.name} (${client.email})`);
     console.log(`[RJR LOGIN DEBUG] Senha digitada: ${password}`);
-    console.log(`[RJR LOGIN DEBUG] Hash gerado da senha digitada: ${inputHash}`);
+    console.log(`[RJR LOGIN DEBUG] Senha limpa (trimmed): ${cleanPassword}`);
     console.log(`[RJR LOGIN DEBUG] Senha salva no Banco (storedHash): ${storedHash}`);
+    console.log(`[RJR LOGIN DEBUG] Senha salva no Banco limpa (trimmed): ${cleanStoredPassword}`);
     console.log(`[RJR LOGIN DEBUG] Comparação Hash bate?: ${matchesHash}`);
     console.log(`[RJR LOGIN DEBUG] Comparação Texto puro bate?: ${matchesPlain}`);
 
