@@ -339,27 +339,23 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
         <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between py-3.5">
           
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-md">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
+            <img src="/logo.svg" alt="RJR Sign Logo" className="w-10 h-10 object-contain animate-fade-in" referrerPolicy="no-referrer" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-sans font-extrabold text-lg text-slate-900 leading-none">RJR SIGN</span>
                 <span className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-100">
-                  ASSINANTE OPERACIONAL
+                  PORTAL DO ASSINANTE
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 block leading-none mt-1">Portal do Cliente Contratante</span>
+              <span className="text-[11px] text-slate-500 block leading-none mt-1">Gestão de Documentos Digitais</span>
             </div>
           </div>
 
           {/* Right Area */}
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 text-[10px] text-amber-600 font-extrabold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 uppercase font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-              AMBIENTE SEGURO
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-500/10 uppercase font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Conexão Ativa
             </span>
             <div className="text-right hidden md:block">
               <strong className="text-xs text-slate-900 block truncate max-w-[150px]">{user.name}</strong>
@@ -525,9 +521,6 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
               <div className="bg-slate-900 text-white p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="bg-white/10 px-2.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider text-amber-300 font-mono">
-                      CONTRATO ID: {selectedContract.id}
-                    </span>
                     <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-[9px] font-bold">
                       {selectedContract.category}
                     </span>
@@ -577,26 +570,36 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
                 <span className="text-xxs uppercase tracking-wider text-slate-400 font-extrabold block mb-3">CONFORMIDADE DE ASSINATURAS DO INSTRUMENTO</span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedContract.signers?.map((signer, sIdx) => (
-                    <div key={sIdx} className="p-3.5 rounded-xl border border-slate-100 flex items-start justify-between bg-slate-50 text-xxs">
-                      <div className="space-y-1">
-                        <strong className="text-slate-800 font-bold block">{signer.name}</strong>
-                        <span className="text-slate-400 font-mono block">{signer.email}</span>
-                        {signer.status === "signed" ? (
-                          <div className="text-[9px] text-green-600 space-y-0.5 mt-1">
-                            <p>Assinatura eletrônica gravada em fuso UTC em {formatDate(signer.signedAt)}</p>
-                          </div>
-                        ) : (
-                          <span className="text-amber-500 font-medium block mt-1">Aguardando manifestação civil</span>
-                        )}
-                      </div>
+                    <div key={sIdx} className="p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between bg-slate-50 text-xxs">
+                      <div className="flex items-start justify-between w-full">
+                        <div className="space-y-1">
+                          <strong className="text-slate-800 font-bold block">{signer.name}</strong>
+                          <span className="text-slate-400 font-mono block">{signer.email}</span>
+                          {signer.status === "signed" ? (
+                            <div className="text-[9px] text-green-600 space-y-0.5 mt-1">
+                              <p>Assinatura eletrônica gravada em {formatDate(signer.signedAt)}</p>
+                            </div>
+                          ) : (
+                            <span className="text-amber-500 font-medium block mt-1">Aguardando assinatura</span>
+                          )}
+                        </div>
 
-                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border ${
-                        signer.status === "signed"
-                          ? "bg-green-50 text-green-600 border-green-200"
-                          : "bg-slate-100 text-slate-400 border-slate-200 animate-pulse"
-                      }`}>
-                        {signer.status === "signed" ? "✓ Assinado" : "Pendente"}
-                      </span>
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border ${
+                          signer.status === "signed"
+                            ? "bg-green-50 text-green-600 border-green-200"
+                            : "bg-slate-100 text-slate-400 border-slate-200 animate-pulse"
+                        }`}>
+                          {signer.status === "signed" ? "✓ Assinado" : "Pendente"}
+                        </span>
+                      </div>
+                      {signer.status === "signed" && signer.signatureDrawing && (
+                        <div className="mt-3 pt-3 border-t border-slate-200/50 flex flex-col items-start w-full">
+                          <span className="text-[9px] text-slate-400 font-mono block mb-1">REPRESENTAÇÃO DIGITAL DA FIRMA:</span>
+                          <div className="bg-white p-1.5 rounded-lg border border-slate-200 max-w-xs w-full flex items-center justify-center">
+                            <img src={signer.signatureDrawing} alt={`Firma de ${signer.name}`} className="max-h-[50px] object-contain" referrerPolicy="no-referrer" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -751,7 +754,15 @@ export default function ClientDashboard({ user, onLogout }: ClientDashboardProps
             <strong>RJR Sign Portal</strong> • Todos os direitos reservados © 2026.
           </div>
           <div>
-            Firme Eletrônica com Audit Trail do Servidor.
+            Desenvolvido por{" "}
+            <a 
+              href="https://devrogeriojunior.com.br" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-slate-500 hover:text-slate-900 font-bold hover:underline transition-colors"
+            >
+              Rogério Júnior
+            </a>
           </div>
         </div>
       </footer>

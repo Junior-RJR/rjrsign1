@@ -59,7 +59,7 @@ function mapContractFromDb(row: any): Contract {
     sentEmailCount: row.sent_email_count,
     downloadCount: row.download_count,
     category: row.category,
-    value: Number(row.value) || 179.90,
+    value: row.value !== null && row.value !== undefined ? Number(row.value) : undefined,
     signers: row.signers || []
   };
 }
@@ -1121,6 +1121,10 @@ app.post("/api/auth/register", async (req, res) => {
         return res.status(400).json({ error: "Este endereço de e-mail já está cadastrado" });
       }
 
+      const hasChangedPasswordValue = req.body.hasChangedPassword !== undefined 
+        ? req.body.hasChangedPassword 
+        : (isAdmin || cleanEmail === "devrogeriojunior@gmail.com" ? true : false);
+
       const { error: insertError } = await supabase
         .from("registered_clients")
         .insert({
@@ -1129,7 +1133,7 @@ app.post("/api/auth/register", async (req, res) => {
           email: cleanEmail,
           representatives: formattedReps,
           current_password: hashedPassword,
-          has_changed_password: true
+          has_changed_password: hasChangedPasswordValue
         });
 
       if (insertError) {
@@ -1142,12 +1146,16 @@ app.post("/api/auth/register", async (req, res) => {
         return res.status(400).json({ error: "Este endereço de e-mail já está cadastrado" });
       }
 
+      const hasChangedPasswordValue = req.body.hasChangedPassword !== undefined 
+        ? req.body.hasChangedPassword 
+        : (isAdmin || cleanEmail === "devrogeriojunior@gmail.com" ? true : false);
+
       const newClient: RegisteredClient = {
         id: newId,
         name,
         email: cleanEmail,
         representatives: formattedReps,
-        hasChangedPassword: true,
+        hasChangedPassword: hasChangedPasswordValue,
         createdAt: new Date().toISOString()
       };
 
@@ -1162,7 +1170,9 @@ app.post("/api/auth/register", async (req, res) => {
         name,
         email: cleanEmail,
         representatives: formattedReps,
-        hasChangedPassword: true,
+        hasChangedPassword: req.body.hasChangedPassword !== undefined 
+          ? req.body.hasChangedPassword 
+          : (isAdmin || cleanEmail === "devrogeriojunior@gmail.com" ? true : false),
         isAdmin: cleanEmail === "devrogeriojunior@gmail.com"
       }
     });
@@ -1288,6 +1298,110 @@ app.delete("/api/clients/:id", async (req, res) => {
   }
 });
 
+app.post("/api/admin/purge-and-protect", async (req, res) => {
+  console.log("[RJR DATABASE PURGE] Iniciando limpeza total com proteção ao admin.");
+  const adminEmail = "devrogeriojunior@gmail.com";
+  const defaultAdminPass = "Manu2612";
+  const hashedAdminPass = hashPassword(defaultAdminPass);
+
+  try {
+    if (supabase) {
+      // 1. Delete all contracts, and associated rows in order
+      console.log("[RJR DATABASE PURGE] Wiping tables in Supabase...");
+      await supabase.from("contracts").delete().neq("id", "none");
+      await supabase.from("billing_items").delete().neq("id", "none");
+      await supabase.from("leads").delete().neq("id", "none");
+      await supabase.from("newsletter").delete().neq("id", "none");
+
+      // 2. Delete clients except primary admin
+      const { error: deleteClientsErr } = await supabase
+        .from("registered_clients")
+        .delete()
+        .neq("email", adminEmail);
+
+      if (deleteClientsErr) {
+        console.error("[RJR DATABASE PURGE] Error deleting other clients:", deleteClientsErr);
+      }
+
+      // 3. Re-verify or insert devrogeriojunior@gmail.com
+      const { data: adminExists } = await supabase
+        .from("registered_clients")
+        .select("id")
+        .eq("email", adminEmail)
+        .maybeSingle();
+
+      if (!adminExists) {
+        console.log("[RJR DATABASE PURGE] Master admin not found! Creating/Restoring...");
+        await supabase.from("registered_clients").insert({
+          id: "admin-user",
+          name: "Rogério Júnior (Admin)",
+          email: adminEmail,
+          current_password: hashedAdminPass,
+          has_changed_password: true,
+          representatives: [
+            { name: "Rogério Júnior", email: adminEmail, role: "Administrador Técnico" }
+          ]
+        });
+      } else {
+        // Enforce actual protected password "Manu2612" to protect the master admin account on reset!
+        console.log("[RJR DATABASE PURGE] Master admin found. Enforcing default password and hasChangedPassword=true...");
+        await supabase
+          .from("registered_clients")
+          .update({
+            current_password: hashedAdminPass,
+            has_changed_password: true,
+            name: "Rogério Júnior (Admin)"
+          })
+          .eq("email", adminEmail);
+      }
+    }
+
+    // Always do the exact same for memory JSON database fallback as a safety
+    if (db) {
+      console.log("[RJR DATABASE PURGE] Wiping tables in memory fallbacks...");
+      db.contracts = [];
+      db.billingItems = [];
+      db.leads = [];
+      db.newsletter = [];
+      
+      const adminClient = db.clients.find((c: any) => c.email.toLowerCase().trim() === adminEmail);
+      if (adminClient) {
+        db.clients = [adminClient];
+        db.passMap = {
+          [adminClient.id]: hashedAdminPass
+        };
+        // Enforce is admin constraints
+        adminClient.hasChangedPassword = true;
+        adminClient.name = "Rogério Júnior (Admin)";
+      } else {
+        const newAdmin = {
+          id: "admin-user",
+          name: "Rogério Júnior (Admin)",
+          email: adminEmail,
+          representatives: [
+            { name: "Rogério Júnior", email: adminEmail, role: "Administrador Técnico" }
+          ],
+          hasChangedPassword: true,
+          createdAt: new Date().toISOString()
+        };
+        db.clients = [newAdmin];
+        db.passMap = {
+          "admin-user": hashedAdminPass
+        };
+      }
+      saveDatabase();
+    }
+
+    return res.json({
+      success: true,
+      message: "Banco de dados limpo e usuário master (devrogeriojunior@gmail.com) restabelecido e protegido com sucesso!"
+    });
+  } catch (err: any) {
+    console.error("[RJR DATABASE PURGE] Erro geral ao limpar o banco:", err);
+    return res.status(500).json({ error: "Erro interno no servidor ao tentar limpar o banco.", details: err.message });
+  }
+});
+
 // Contracts management APIs
 app.get("/api/contracts", async (req, res) => {
   const { clientEmail } = req.query;
@@ -1390,8 +1504,8 @@ app.post("/api/contracts", async (req, res) => {
         { name: "Rogério Júnior", email: "devrogeriojunior@gmail.com", status: "pending" }
       ];
 
-  const contractValue = Number(value) || 179.90;
-  const contractCategory = category || "Prevenção e Serviços";
+  const contractValue = value !== undefined && value !== "" && value !== null && !isNaN(Number(value)) ? Number(value) : null;
+  const contractCategory = category || "Prestação de Serviços";
 
   try {
     if (supabase) {

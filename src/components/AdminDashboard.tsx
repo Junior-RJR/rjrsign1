@@ -36,7 +36,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const [selectedClientIndex, setSelectedClientIndex] = useState<number>(-1);
   const [customClientName, setCustomClientName] = useState("");
   const [customClientEmail, setCustomClientEmail] = useState("");
-  const [contractValue, setContractValue] = useState("179.90");
+  const [contractValue, setContractValue] = useState(""); // Default to empty string so it is optional
   const [contractCategory, setContractCategory] = useState("Prestação de Serviços");
   const [contractContent, setContractContent] = useState("");
 
@@ -44,7 +44,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientRepName, setClientRepName] = useState("");
-  const [clientRepRole, setClientRepRole] = useState("Diretor Comercial");
+  const [clientPassword, setClientPassword] = useState("123456");
 
   // Form states - Billing
   const [billingClientIndex, setBillingClientIndex] = useState<number>(-1);
@@ -122,7 +122,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         setSelectedClientIndex(-1);
         setCustomClientName("");
         setCustomClientEmail("");
-        setContractValue("179.90");
+        setContractValue("");
         setContractContent("");
         loadData();
       } else {
@@ -149,24 +149,25 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
         body: JSON.stringify({
           name: clientName,
           email: clientEmail.toLowerCase().trim(),
-          password: "123456", // Padrão
+          password: clientPassword || "123456",
+          hasChangedPassword: false, // MANDATORY PASSWORD CHANGE ON FIRST ACCESS
           representatives: [
             {
               name: clientRepName || clientName,
               email: clientEmail,
-              role: clientRepRole || "Rep. Legal"
+              role: "Cliente"
             }
           ]
         })
       });
 
       if (res.ok) {
-        alert(`Cliente cadastrado com sucesso! Código Chave de acesso liberado.`);
+        alert(`Cliente cadastrado com sucesso! Uma senha provisória foi configurada.`);
         setIsClientModalOpen(false);
         setClientName("");
         setClientEmail("");
         setClientRepName("");
-        setClientRepRole("Diretor Comercial");
+        setClientPassword("123456"); // Reset to standard default placeholder
         loadData();
       } else {
         const err = await res.json();
@@ -295,19 +296,15 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
           
           {/* Brand info with logo icon */}
           <div className="flex items-center gap-3 self-start md:self-auto">
-            <div className="w-10 h-10 bg-gradient-to-tr from-[#0052FF] to-[#0088FE] rounded-xl flex items-center justify-center text-white shadow-md">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-            </div>
+            <img src="/logo.svg" alt="RJR Sign Logo" className="w-10 h-10 object-contain" referrerPolicy="no-referrer" />
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-sans font-extrabold text-lg text-slate-900 leading-tight">RJR SYNC</span>
-                <span className="bg-[#0088FE]/10 text-[#0052FF] text-[9px] font-bold px-2 py-0.5 rounded-full border border-blue-400/20">
-                  V1.2 FULLSTACK
+                <span className="font-sans font-extrabold text-lg text-slate-900 leading-tight">RJR SIGN</span>
+                <span className="bg-[#0052FF]/10 text-[#0052FF] text-[9px] font-bold px-2 py-0.5 rounded-full border border-blue-400/15">
+                  ADMINISTRADOR
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 block leading-none mt-1">Contratos & Gestão de Cobranças</span>
+              <span className="text-[11px] text-slate-500 block leading-none mt-1">Gestor de Contratos e Cobranças</span>
             </div>
           </div>
 
@@ -361,9 +358,9 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
           {/* Right actions */}
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-[10px] text-amber-600 font-extrabold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 uppercase font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-              MOCK / MEMÓRIA
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-500/10 uppercase font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Banco de Dados Ativo
             </span>
             <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
               <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
@@ -898,13 +895,21 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       </main>
 
       {/* FOOTER - perfectly literal and humble */}
-      <footer className="bg-white border-t border-slate-200 py-6 mt-12">
+      <footer className="bg-white border-t border-slate-200 py-6 mt-12 bg-slate-50/50">
         <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div>
-            <strong>RJR Sync</strong> • Todos os direitos reservados © 2026.
+            <strong>RJR Sign Portal</strong> • Todos os direitos reservados © 2026.
           </div>
           <div>
-            Desenvolvido por <strong className="text-slate-600 hover:text-blue-500 underline decoration-dotted transition-colors">Rogério Júnior</strong>.
+            Desenvolvido por{" "}
+            <a 
+              href="https://devrogeriojunior.com.br" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-slate-550 hover:text-slate-900 font-bold hover:underline transition-colors"
+            >
+              Rogério Júnior
+            </a>
           </div>
         </div>
       </footer>
@@ -1095,7 +1100,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nome da Empresa / Cliente Licenciado *</label>
                   <input
                     type="text"
-                    placeholder="Ex: Bellacor Tintas Ltda"
+                    placeholder="Exemplo: Construtora Alfa S.A."
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
@@ -1107,7 +1112,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">E-mail Corporativo de Login *</label>
                   <input
                     type="email"
-                    placeholder="Ex: consultor@bellacortintas.com.br"
+                    placeholder="Exemplo: gerencia@empresa.com.br"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono"
@@ -1115,35 +1120,38 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                   />
                 </div>
 
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Senha Provisória do Cliente *</label>
+                  <input
+                    type="text"
+                    placeholder="Defina a senha inicial provisória para o cliente"
+                    value={clientPassword}
+                    onChange={(e) => setClientPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 font-mono font-bold"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Defina a senha que você enviará para o cliente acessar pela primeira vez.
+                  </span>
+                </div>
+
                 <div className="border-t border-slate-100 my-2 pt-3">
                   <span className="text-[9px] uppercase tracking-wider font-extrabold text-[#0052FF] block mb-2">Dados do Representante Relacionado</span>
                   
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-1">Nome do Signatário</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Bruno Carvalho"
-                        value={clientRepName}
-                        onChange={(e) => setClientRepName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-bold text-slate-400 mb-1">Cargo / Função</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Diretor Comercial"
-                        value={clientRepRole}
-                        onChange={(e) => setClientRepRole(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 mb-1">Nome do Signatário</label>
+                    <input
+                      type="text"
+                      placeholder="Nome do Representante Legal (Ex: Carlos Alberto)"
+                      value={clientRepName}
+                      onChange={(e) => setClientRepName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500"
+                    />
                   </div>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-[10px] text-slate-500 leading-normal">
-                  💡 <strong>Informação de Segurança:</strong> As novas contas criadas recebem por padrão a senha provisória <strong>123456</strong>. É exigido do cliente redefini-la no primeiro login operacional.
+                  💡 <strong>Informação de Segurança:</strong> O cliente cadastrado com essa senha provisória será obrigado a redefini-la imediatamente em seu primeiro login no portal.
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

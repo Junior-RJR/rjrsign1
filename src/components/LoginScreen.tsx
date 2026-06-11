@@ -33,13 +33,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       const payload: any = { email, password };
       if (isSignUp) {
         payload.name = name || email.split("@")[0];
-        // If registering a custom admin (e.g. devrogeriojunior@gmail.com, force it)
         payload.isAdmin = isAdminRole || email === "devrogeriojunior@gmail.com";
         payload.representatives = [
           {
-            name: repName || name || "Representante",
+            name: name || "Representante",
             email: email,
-            role: isAdminRole ? "Administrador Técnico" : repRole
+            role: isAdminRole ? "Administrador Técnico" : "Cliente"
           }
         ];
       }
@@ -95,8 +94,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {/* Title branding text */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white font-black text-2xl font-mono shadow-md mb-3">
-            R
+          <div className="mx-auto flex items-center justify-center mb-3">
+            <img src="/logo.svg" alt="RJR Sign Logo" className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
           </div>
           <h2 className="text-2xl font-bold font-sans tracking-tight text-white leading-none">RJR Sign</h2>
           <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
@@ -126,12 +125,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 className="space-y-4 overflow-hidden"
               >
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nome Completo do Cliente ou Admin</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nome Completo</label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                     <input
                       type="text"
-                      placeholder="Ex: Rogério Júnior, Bruno Carvalho"
+                      placeholder="Nome do Cliente ou Empresa"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full pl-10 pr-4 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
@@ -140,38 +139,15 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nome do Representante Legal</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Rogério Monteiro da Silva Junior"
-                    value={repName}
-                    onChange={(e) => setRepName(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nível de Acesso (Perfil)</label>
-                    <select
-                      value={isAdminRole ? "admin" : "client"}
-                      onChange={(e) => setIsAdminRole(e.target.value === "admin")}
-                      className="w-full px-3 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white focus:outline-none"
-                    >
-                      <option value="client">Cliente Contratante</option>
-                      <option value="admin">Administrador Master</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cargo Comercial</label>
-                    <input
-                      type="text"
-                      placeholder="Diretor Comercial, Engenheiro"
-                      value={repRole}
-                      onChange={(e) => setRepRole(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none"
-                    />
-                  </div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nível de Acesso (Perfil)</label>
+                  <select
+                    value={isAdminRole ? "admin" : "client"}
+                    onChange={(e) => setIsAdminRole(e.target.value === "admin")}
+                    className="w-full px-3 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white focus:outline-none"
+                  >
+                    <option value="client">Cliente</option>
+                    <option value="admin">Administrador Técnico</option>
+                  </select>
                 </div>
               </motion.div>
             ) : null}
@@ -184,7 +160,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               <input
                 type="email"
                 required
-                placeholder="Exemplo: consultor@bellacortintas.com.br ou devrogeriojunior@gmail.com"
+                placeholder="Exemplo: cliente@empresa.com.br ou seu-email@dominio.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#090d16] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 font-mono"
@@ -249,16 +225,28 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         <div className="mt-5 p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/60 text-[10px] text-slate-400 leading-normal space-y-1.5">
           <div className="flex items-center gap-1.5 text-slate-300 font-bold">
             <Info className="w-3.5 h-3.5 text-[#0088FE]" />
-            <span>Guia Rápido de Acesso em Sandbox:</span>
+            <span>Guia de Acesso Técnico:</span>
           </div>
           <p>
-            • <strong>Cliente Exemplo:</strong> consultor@bellacortintas.com.br / Senha: <strong>123456</strong>.
+            • <strong>Usuário Administrador:</strong> devrogeriojunior@gmail.com / Senha: <strong>Manu2612</strong>
           </p>
           <p>
-            • <strong>Rogério Júnior (Admin):</strong> devrogeriojunior@gmail.com / Senha: <strong>Manu2612</strong>.
+            • Novo cliente cadastrado poderá acessar com a senha provisória definida no momento de seu cadastro.
           </p>
         </div>
 
+      </div>
+
+      <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-slate-500">
+        Desenvolvido por{" "}
+        <a 
+          href="https://devrogeriojunior.com.br" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-slate-400 hover:text-white font-medium hover:underline transition-all"
+        >
+          Rogério Júnior
+        </a>
       </div>
     </div>
   );
