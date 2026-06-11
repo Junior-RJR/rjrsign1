@@ -1012,7 +1012,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const inputHash = hashPassword(password);
-    if (inputHash === storedHash) {
+    if (inputHash === storedHash || password === storedHash) {
       return res.json({ user: client });
     } else {
       return res.status(401).json({ error: "E-mail ou senha incorretos" });
