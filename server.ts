@@ -2243,7 +2243,8 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== "production") {
     // Vite Dev Middleware Configuration
-    const { createServer } = await import("vite");
+    const viteMod = "vite";
+    const { createServer } = await import(viteMod);
     const vite = await createServer({
       server: { middlewareMode: true },
       appType: "spa"
