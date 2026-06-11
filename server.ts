@@ -4,7 +4,6 @@ import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
-import { createServer as createViteServer } from "vite";
 import { RegisteredClient, Contract, BillingItem, Lead, NewsletterEmail, Product, Category, Representative, SignerStatus } from "./src/types";
 
 // Load environment variables from .env if present
@@ -511,6 +510,61 @@ function saveDatabase() {
 // Load DB immediately
 loadDatabase();
 
+// --- DIAGNOSTICS ENDPOINT ---
+app.get("/api/diagnose", async (req, res) => {
+  const mask = (str: string) => {
+    if (!str) return "NOT_SET";
+    if (str.length <= 8) return "***";
+    return `${str.substring(0, 4)}...${str.substring(str.length - 4)}`;
+  };
+
+  const results: any = {
+    timestamp: new Date().toISOString(),
+    environment: {
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL: process.env.VERCEL,
+      SUPABASE_URL_SET: !!process.env.SUPABASE_URL,
+      SUPABASE_URL_MASKED: mask(process.env.SUPABASE_URL || ""),
+      SUPABASE_URL_CLEANED_MASKED: mask(SUPABASE_URL),
+      SUPABASE_KEY_SET: !!process.env.SUPABASE_KEY,
+      SUPABASE_KEY_MASKED: mask(process.env.SUPABASE_KEY || ""),
+      SUPABASE_ANON_KEY_SET: !!process.env.SUPABASE_ANON_KEY,
+      SUPABASE_ANON_KEY_MASKED: mask(process.env.SUPABASE_ANON_KEY || ""),
+      isSupabaseConfigured
+    },
+    supabase_status: "not_checked"
+  };
+
+  if (supabase) {
+    try {
+      results.supabase_status = "initialized";
+      const { data, error } = await supabase
+        .from("registered_clients")
+        .select("id")
+        .limit(1);
+
+      if (error) {
+        results.supabase_connection_error = error;
+        results.supabase_status = "error_querying_table";
+        results.advice = "O banco de dados do Supabase está conectado, mas houve um erro ao consultar a tabela 'registered_clients'. Verifique se você colou e executou o script 'supabase-schema.sql' no SQL Editor do seu painel do Supabase para criar as tabelas necessários.";
+      } else {
+        results.supabase_status = "success_connected";
+        results.query_sample_result = data;
+        results.advice = "Conexão com o Supabase e tabela 'registered_clients' funcionando perfeitamente!";
+      }
+    } catch (err: any) {
+      results.supabase_status = "exception_occurred";
+      results.exception_message = err.message;
+      results.exception_stack = err.stack;
+    }
+  } else {
+    results.supabase_status = "null_not_configured";
+    results.advice = "Supabase não configurado. Certifique-se de definir as variáveis de ambiente SUPABASE_URL e SUPABASE_ANON_KEY na Vercel.";
+  }
+
+  res.json(results);
+});
+
 // --- API ROUTES ---
 
 // Brazilian CNPJ Lookup proxy with Fallback resolver
@@ -621,7 +675,12 @@ app.post("/api/auth/login", async (req, res) => {
 
       if (error) {
         console.error("Erro ao buscar login no Supabase:", error);
-        return res.status(500).json({ error: "Erro de conexão com o banco de dados." });
+        return res.status(500).json({ 
+          error: "Erro de conexão com o banco de dados Supabase.", 
+          details: error.message, 
+          code: error.code,
+          hint: "Por favor, verifique se você executou o arquivo 'supabase-schema.sql' no console SQL do Supabase." 
+        });
       }
 
       if (data) {
@@ -660,9 +719,13 @@ app.post("/api/auth/login", async (req, res) => {
     } else {
       return res.status(401).json({ error: "E-mail ou senha incorretos" });
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("Erro interno de login:", err);
-    res.status(500).json({ error: "Erro interno no servidor de login." });
+    res.status(500).json({ 
+      error: "Erro interno no servidor de login.", 
+      message: err.message, 
+      stack: err.stack 
+    });
   }
 });
 
@@ -2180,7 +2243,8 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== "production") {
     // Vite Dev Middleware Configuration
-    const vite = await createViteServer({
+    const { createServer } = await import("vite");
+    const vite = await createServer({
       server: { middlewareMode: true },
       appType: "spa"
     });

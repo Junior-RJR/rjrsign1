@@ -54,11 +54,23 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         const data = await res.json();
         onLoginSuccess(data.user);
       } else {
-        const errData = await res.json();
-        setError(errData.error || "Erro ao realizar operação de segurança. Verifique seus dados.");
+        let errorMessage = "Erro ao realizar operação de segurança. Verifique seus dados.";
+        try {
+          const text = await res.text();
+          try {
+            const errData = JSON.parse(text);
+            errorMessage = errData.error || (errData.details ? `${errData.error}: ${errData.details}` : errorMessage);
+          } catch (e) {
+            // It's not JSON (could be a HTML error page or cloudflare event)
+            errorMessage = `Erro ${res.status}: Servidor retornou uma resposta inesperada.`;
+          }
+        } catch (readErr) {
+          errorMessage = `Erro ${res.status} no servidor.`;
+        }
+        setError(errorMessage);
       }
-    } catch (err) {
-      setError("Servidor indisponível ou erro inesperado de rede.");
+    } catch (err: any) {
+      setError(`Servidor indisponível ou erro inesperado de rede: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
